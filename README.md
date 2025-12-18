@@ -5,7 +5,7 @@ A clean, high-contrast weather dashboard for the [Pimoroni Inky Impression 7.3"]
 ![Dashboard Preview](dashboard-preview.jpg)
 
 ## The Story
-I have dreamed of building a custom weather display like this for years, but I never felt I had the technical ability to pull it off. This project is a personal breakthrough—it was "vibe coded" with the help of **Google Gemini** acting as my pair programmer.
+I have dreamed of building a custom weather display like this for years, but I never felt I had the technical ability to pull it off. This project was "vibe coded" with the help of **Google Gemini** acting as my pair programmer.
 
 It is a passion project, built by a hobbyist for hobbyists. I welcome any suggestions, forks, or pull requests from those who really know what they are doing to help make the code cleaner and better!
 
@@ -24,12 +24,6 @@ It is a passion project, built by a hobbyist for hobbyists. I welcome any sugges
 
 These instructions assume you are starting with a fresh Raspberry Pi OS (Bookworm or newer) image.
 
-### 1. Prerequisite: Remote Access
-I highly recommend installing [Tailscale](https://tailscale.com) on your Pi for easy, secure SSH access from anywhere without opening ports.
-```bash
-curl -fsSL [https://tailscale.com/install.sh](https://tailscale.com/install.sh) | sh
-sudo tailscale up --ssh
-
 ## Credits & Licenses
 This is a non-commercial passion project built by a hobbyist, for hobbyists. I welcome suggestions and improvements!
 
@@ -39,3 +33,10 @@ All data and assets belong to their respective creators:
 * **Icons:** [Weather Icons](https://erikflowers.github.io/weather-icons/) by Erik Flowers (Licensed under SIL OFL 1.1).
 * **Typography:** [Merriweather](https://fonts.google.com/specimen/Merriweather) by Sorkin Type (Licensed under SIL OFL 1.1).
 * **Hardware Library:** [Inky](https://github.com/pimoroni/inky) by Pimoroni.
+
+### Prerequisite: Remote Access
+I highly recommend installing [Tailscale](https://tailscale.com) on your Pi for easy, secure SSH access from anywhere without opening ports.
+```bash
+curl -fsSL [https://tailscale.com/install.sh](https://tailscale.com/install.sh) | sh
+sudo tailscale up --ssh
+
