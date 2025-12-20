@@ -2,7 +2,9 @@
 
 A clean, high-contrast weather dashboard for the [Pimoroni Inky Impression 7.3"](https://shop.pimoroni.com/products/inky-impression-7-3) powered by a [Tempest Weather System](https://weatherflow.com/tempest-weather-system/).
 
-![Dashboard Preview](dashboard-preview.jpg)
+<img src="dashboard-preview.jpg" width="600" alt="Dashboard Preview">
+<br>
+<img src="IRL.jpg" width="600" alt="IRL Image">
 
 ## The Story
 I have dreamed of building a custom weather display like this for years, but I never felt I had the technical ability to pull it off. This project was "vibe coded" with the help of Google Gemini acting as my pair programmer.
