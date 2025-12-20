@@ -99,7 +99,6 @@ def get_wi_icon(icon_name):
 def fetch_weather():
     try:
         r_obs = requests.get(URL_OBS, timeout=20).json()
-        # API Error Handling
         if 'status' in r_obs and r_obs['status'].get('status_code') != 0:
              print(f"API Error: {r_obs}")
              return None
@@ -145,7 +144,6 @@ def fetch_weather():
         return None
 
 def create_dashboard(weather):
-    # Setup Palette
     img = Image.new("P", (WIDTH, HEIGHT), color=1)
     palette = [
         0, 0, 0,        255, 255, 255,  0, 255, 0,
@@ -167,7 +165,10 @@ def create_dashboard(weather):
         return 0
 
     try:
-        font_huge = ImageFont.truetype(FONT_BOLD, 130)
+        # FONT TWEAKS
+        font_huge = ImageFont.truetype(FONT_BOLD, 100)
+        font_unit = ImageFont.truetype(FONT_BOLD, 50) 
+        
         font_wi_main = ImageFont.truetype(FONT_WI, 110) 
         font_wi_small = ImageFont.truetype(FONT_WI, 50) 
         font_header = ImageFont.truetype(FONT_BOLD, 24)
@@ -183,8 +184,8 @@ def create_dashboard(weather):
         return img
 
     # --- DRAWING ---
-    # 1. Header
-    draw.rectangle([(0, 0), (WIDTH, 65)], fill=0)
+    # 1. Header (Full Width fix)
+    draw.rectangle([(0, 0), (WIDTH + 100, 65)], fill=0)
     draw.text((30, 32), "Tempest Weather", fill=1, font=font_header, anchor="lm")
     
     # TIMESTAMP (Cross-Platform)
@@ -194,19 +195,40 @@ def create_dashboard(weather):
         time_fmt = "%b %d, %-I:%M %p" # Linux/Pi
         
     ts = time.strftime(time_fmt)
-    draw.text((WIDTH - 30, 32), ts, fill=1, font=font_header, anchor="rm")
+    # Pull timestamp back slightly to avoid edge
+    draw.text((WIDTH - 20, 32), ts, fill=1, font=font_header, anchor="rm")
 
     # 2. Main Stats
     icon_idx = get_color_index(weather['icon_color'])
     draw.text((40, 120), weather['icon_char'], fill=icon_idx, font=font_wi_main)
 
+    # --- TEMPERATURE LOGIC ---
+    # 1. Draw the number
+    temp_str = str(weather['temp'])
     temp_idx = get_color_index(get_temp_color(weather['temp']))
-    draw.text((200, 110), f"{weather['temp']}°", fill=temp_idx, font=font_huge)
-    draw.text((210, 250), weather['summary'], fill=0, font=font_med)
+    
+    # Move X start to 210 to give icon breathing room
+    start_x_temp = 210
+    start_y_temp = 120 
+    
+    draw.text((start_x_temp, start_y_temp), temp_str, fill=temp_idx, font=font_huge)
+    
+    # 2. Measure the number to know where to put the "°c"
+    # bbox returns (left, top, right, bottom)
+    bbox = draw.textbbox((start_x_temp, start_y_temp), temp_str, font=font_huge)
+    temp_width = bbox[2] - bbox[0]
+    
+    # 3. Draw the unit (smaller, lowercase) next to it
+    draw.text((start_x_temp + temp_width + 5, start_y_temp + 10), "°c", fill=temp_idx, font=font_unit)
+    
+    # Summary
+    draw.text((220, 250), weather['summary'], fill=0, font=font_med)
 
-    # 3. Data Grid
-    x_label = 480 
-    x_val_anchor = 760 
+    # 3. Data Grid (Layout Tweak)
+    # Moved Left: 510 -> 490
+    # Moved Right: 790 -> 770 (Brings it in ~4mm from edge)
+    x_label = 490 
+    x_val_anchor = 770 
     y_start = 100
     row_h = 45
 
@@ -226,7 +248,7 @@ def create_dashboard(weather):
     # 4. Footer
     divider_y = 330
     if weather['strikes'] > 0:
-        draw.rectangle([(0, HEIGHT - 50), (WIDTH, HEIGHT)], fill=4)
+        draw.rectangle([(0, HEIGHT - 50), (WIDTH + 100, HEIGHT)], fill=4)
         draw.text((150, HEIGHT - 40), f"LIGHTNING DETECTED: {weather['strikes']}", fill=1, font=font_header)
     else:
         draw.line([(20, divider_y), (WIDTH - 20, divider_y)], fill=0, width=2)
@@ -235,10 +257,16 @@ def create_dashboard(weather):
         for i, day in enumerate(weather['forecast']):
             x = start_x + (i * gap_x)
             y = divider_y + 15
+            
+            # Day Name
             draw.text((x + 20, y), day['day'], fill=0, font=font_small)
+            
+            # Icon
             i_idx = get_color_index(day['icon_color'])
             draw.text((x + 15, y + 25), day['icon_char'], fill=i_idx, font=font_wi_small)
-            draw.text((x + 5, y + 90), f"{day['high']}° / {day['low']}°", fill=0, font=font_small)
+            
+            # High/Low Temp (Moved down +100 to fix clash with icon)
+            draw.text((x + 5, y + 100), f"{day['high']}° / {day['low']}°", fill=0, font=font_small)
 
     return img
 
@@ -250,15 +278,13 @@ def main():
         img = create_dashboard(weather)
         
         if INKY_AVAILABLE:
-            # Running on Raspberry Pi with Hardware
             print("Updating Inky display...")
             inky_display = auto()
             inky_display.set_image(img)
             inky_display.show()
         else:
-            # Running on Windows (or Pi without hardware)
             print("Inky not detected. Saving preview to 'dashboard-preview.jpg'...")
-            img = img.convert("RGB") # Convert for saving as JPG
+            img = img.convert("RGB")
             img.save("dashboard-preview.jpg")
             print("✅ Saved!")
     else:
