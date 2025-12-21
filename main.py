@@ -11,10 +11,10 @@ try:
 except ImportError:
     INKY_AVAILABLE = False
 
+# --- IMPORT SECRETS ---
+from secrets import STATION_ID, TOKEN
+
 # --- CONFIGURATION ---
-# ⚠️ REPLACE THESE WITH YOUR ACTUAL KEYS AFTER DOWNLOADING
-STATION_ID = "YOUR_STATION_ID"
-TOKEN = "YOUR_API_TOKEN"
 
 URL_OBS = f"https://swd.weatherflow.com/swd/rest/observations/station/{STATION_ID}?token={TOKEN}"
 URL_FORECAST = f"https://swd.weatherflow.com/swd/rest/better_forecast?station_id={STATION_ID}&token={TOKEN}"
@@ -125,8 +125,13 @@ def fetch_weather():
 
         main_char, main_color = get_wi_icon(current.get('icon', 'clear-day'))
 
+        # Grab Feels Like, default to normal temp if missing
+        real_temp = obs.get('air_temperature', 0)
+        feels_like = current.get('feels_like', real_temp)
+
         return {
-            "temp": round(obs.get('air_temperature', 0), 1),
+            "temp": round(real_temp, 1),
+            "feels_like": round(feels_like, 1),
             "humidity": obs.get('relative_humidity', 0),
             "wind_speed": round(obs.get('wind_avg', 0), 1),
             "wind_dir": get_wind_direction(obs.get('wind_direction', 0)),
@@ -202,31 +207,29 @@ def create_dashboard(weather):
     icon_idx = get_color_index(weather['icon_color'])
     draw.text((40, 120), weather['icon_char'], fill=icon_idx, font=font_wi_main)
 
-    # --- TEMPERATURE LOGIC ---
-    # 1. Draw the number
+    # --- TEMPERATURE LOGIC (Moved Up) ---
     temp_str = str(weather['temp'])
     temp_idx = get_color_index(get_temp_color(weather['temp']))
     
-    # Move X start to 210 to give icon breathing room
+    # Moved Y from 120 -> 100 to make room for Feels Like
     start_x_temp = 210
-    start_y_temp = 120 
+    start_y_temp = 100 
     
     draw.text((start_x_temp, start_y_temp), temp_str, fill=temp_idx, font=font_huge)
     
-    # 2. Measure the number to know where to put the "°c"
-    # bbox returns (left, top, right, bottom)
+    # Unit
     bbox = draw.textbbox((start_x_temp, start_y_temp), temp_str, font=font_huge)
     temp_width = bbox[2] - bbox[0]
-    
-    # 3. Draw the unit (smaller, lowercase) next to it
     draw.text((start_x_temp + temp_width + 5, start_y_temp + 10), "°c", fill=temp_idx, font=font_unit)
     
+    # --- FEELS LIKE (New) ---
+    feels_str = f"Feels Like {weather['feels_like']}°"
+    draw.text((220, 210), feels_str, fill=0, font=font_med)
+
     # Summary
     draw.text((220, 250), weather['summary'], fill=0, font=font_med)
 
-    # 3. Data Grid (Layout Tweak)
-    # Moved Left: 510 -> 490
-    # Moved Right: 790 -> 770 (Brings it in ~4mm from edge)
+    # 3. Data Grid
     x_label = 490 
     x_val_anchor = 770 
     y_start = 100
@@ -258,14 +261,11 @@ def create_dashboard(weather):
             x = start_x + (i * gap_x)
             y = divider_y + 15
             
-            # Day Name
             draw.text((x + 20, y), day['day'], fill=0, font=font_small)
-            
-            # Icon
             i_idx = get_color_index(day['icon_color'])
             draw.text((x + 15, y + 25), day['icon_char'], fill=i_idx, font=font_wi_small)
             
-            # High/Low Temp (Moved down +100 to fix clash with icon)
+            # High/Low Temp
             draw.text((x + 5, y + 100), f"{day['high']}° / {day['low']}°", fill=0, font=font_small)
 
     return img
