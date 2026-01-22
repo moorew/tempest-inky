@@ -170,8 +170,9 @@ def create_dashboard(weather):
         return 0
 
     try:
-        # FONT TWEAKS
-        font_huge = ImageFont.truetype(FONT_BOLD, 100)
+        # FONT LOADS
+        # Note: We load the standard sizes here, but 'font_huge' will be 
+        # re-loaded dynamically below based on the temperature length.
         font_unit = ImageFont.truetype(FONT_BOLD, 50) 
         
         font_wi_main = ImageFont.truetype(FONT_WI, 110) 
@@ -189,40 +190,54 @@ def create_dashboard(weather):
         return img
 
     # --- DRAWING ---
-    # 1. Header (Full Width fix)
+    # 1. Header
     draw.rectangle([(0, 0), (WIDTH + 100, 65)], fill=0)
     draw.text((30, 32), "Tempest Weather", fill=1, font=font_header, anchor="lm")
     
-    # TIMESTAMP (Cross-Platform)
+    # TIMESTAMP
     if os.name == 'nt':
-        time_fmt = "%b %d, %#I:%M %p" # Windows
+        time_fmt = "%b %d, %#I:%M %p" 
     else:
-        time_fmt = "%b %d, %-I:%M %p" # Linux/Pi
+        time_fmt = "%b %d, %-I:%M %p" 
         
     ts = time.strftime(time_fmt)
-    # Pull timestamp back slightly to avoid edge
     draw.text((WIDTH - 20, 32), ts, fill=1, font=font_header, anchor="rm")
 
     # 2. Main Stats
     icon_idx = get_color_index(weather['icon_color'])
     draw.text((40, 120), weather['icon_char'], fill=icon_idx, font=font_wi_main)
 
-    # --- TEMPERATURE LOGIC (Moved Up) ---
+    # --- TEMPERATURE LOGIC (DYNAMIC SCALING FIX) ---
     temp_str = str(weather['temp'])
     temp_idx = get_color_index(get_temp_color(weather['temp']))
     
-    # Moved Y from 120 -> 100 to make room for Feels Like
+    # Default big size
+    temp_font_size = 100
+    
+    # If temp is long (e.g. -12.5 is 5 chars), shrink it to prevent collision
+    if len(temp_str) > 4:
+        temp_font_size = 75
+        
+    # Re-load the font with the calculated size
+    font_huge = ImageFont.truetype(FONT_BOLD, temp_font_size)
+
     start_x_temp = 210
     start_y_temp = 100 
     
     draw.text((start_x_temp, start_y_temp), temp_str, fill=temp_idx, font=font_huge)
     
-    # Unit
+    # Unit (Position depends on width of the number)
     bbox = draw.textbbox((start_x_temp, start_y_temp), temp_str, font=font_huge)
     temp_width = bbox[2] - bbox[0]
-    draw.text((start_x_temp + temp_width + 5, start_y_temp + 10), "°c", fill=temp_idx, font=font_unit)
     
-    # --- FEELS LIKE (New) ---
+    # Adjust unit position slightly if we are using the smaller font
+    unit_y_offset = 10
+    if temp_font_size < 100:
+        unit_y_offset = 5 # Tuck it up a bit higher for the smaller font
+        
+    draw.text((start_x_temp + temp_width + 5, start_y_temp + unit_y_offset), "°c", fill=temp_idx, font=font_unit)
+    
+    # --- FEELS LIKE ---
     feels_str = f"Feels Like {weather['feels_like']}°"
     draw.text((220, 210), feels_str, fill=0, font=font_med)
 
