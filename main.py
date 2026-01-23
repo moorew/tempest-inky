@@ -205,7 +205,7 @@ def create_dashboard(weather):
 
     # 2. Main Stats
     icon_idx = get_color_index(weather['icon_color'])
-    draw.text((40, 120), weather['icon_char'], fill=icon_idx, font=font_wi_main)
+    draw.text((105, 160), weather['icon_char'], fill=icon_idx, font=font_wi_main, anchor="mm")
 
     # --- TEMPERATURE LOGIC (DYNAMIC SCALING FIX) ---
     temp_str = str(weather['temp'])
