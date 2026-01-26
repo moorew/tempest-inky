@@ -2,7 +2,7 @@ import sys
 import time
 import os
 import requests
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFont
 
 # --- HARDWARE CHECK ---
 try:
@@ -30,19 +30,18 @@ FONT_BOLD = os.path.join(ASSETS, "font_bold.ttf")
 WIDTH = 800
 HEIGHT = 480
 
-# --- LIGHT MODE PALETTE ---
-# Slightly darkened versions of "Sugar Fruit" for better contrast on white
+# --- HIGH CONTRAST LIGHT PALETTE ---
 BG_COLOR = (255, 255, 255, 255) # Pure White
 TEXT_COLOR = (0, 0, 0)          # Pure Black
-SHADOW_COLOR = (200, 200, 200)  # Light Grey for Icon Shadows
+BADGE_COLOR = (50, 50, 50)      # Dark Charcoal (Background for icons)
 LINE_COLOR = (0, 0, 0)          # Black Dividers
 
-# Temp Colors (Darkened slightly for visibility on white)
-COL_COLD = (116, 121, 170)  # Darker Periwinkle
-COL_COOL = (152, 169, 120)  # Darker Sage
-COL_MILD = (216, 163, 137)  # Darker Peach
-COL_WARM = (217, 173, 124)  # Darker Sand
-COL_HOT  = (208, 82, 24)    # Darker Orange
+# Deepened "Sugar Fruit" colors for visibility on White
+COL_COLD = (60, 60, 110)    # Navy Blue
+COL_COOL = (80, 100, 60)    # Forest Green
+COL_MILD = (160, 90, 60)    # Terra Cotta
+COL_WARM = (180, 110, 40)   # Dark Ochre
+COL_HOT  = (200, 50, 20)    # Deep Red/Orange
 
 # --- LOGIC HELPERS ---
 
@@ -114,27 +113,26 @@ def get_icon_image(icon_name, size=(100, 100)):
             
     return Image.new("RGBA", size, (0,0,0,0))
 
-# --- NEW HELPER: DROP SHADOW PASTER ---
-def paste_with_shadow(base_img, icon, pos, offset=(3, 3)):
+# --- NEW VISUAL HELPER: BADGES ---
+def paste_icon_with_badge(base_img, draw, icon, center_x, center_y, bg_size=100):
     """
-    Creates a dark silhouette of the icon and pastes it behind the real icon.
-    This makes white clouds visible on a white background.
+    Draws a dark circle (Badge) first, then pastes the icon on top.
+    This ensures white icons are visible on white paper.
     """
-    # 1. Extract the alpha channel (the shape of the icon)
-    alpha = icon.getchannel('A')
+    # 1. Draw the Badge
+    r = bg_size / 2
+    draw.ellipse(
+        [(center_x - r, center_y - r), (center_x + r, center_y + r)],
+        fill=BADGE_COLOR
+    )
     
-    # 2. Create a solid grey image of the same size
-    shadow = Image.new('RGBA', icon.size, (200, 200, 200, 255)) # Light Grey Shadow
+    # 2. Center the Icon on the Badge
+    # (Icon size might be different than badge size, usually smaller padding looks nice)
+    w, h = icon.size
+    paste_x = int(center_x - (w / 2))
+    paste_y = int(center_y - (h / 2))
     
-    # 3. Apply the icon's shape to the grey image
-    shadow.putalpha(alpha)
-    
-    # 4. Paste the shadow first (offset)
-    shadow_pos = (pos[0] + offset[0], pos[1] + offset[1])
-    base_img.paste(shadow, shadow_pos, shadow)
-    
-    # 5. Paste the real icon on top
-    base_img.paste(icon, pos, icon)
+    base_img.paste(icon, (paste_x, paste_y), icon)
 
 # --- GRAPH ENGINE ---
 
@@ -223,7 +221,6 @@ def fetch_weather():
         return None
 
 def create_dashboard(weather):
-    # WHITE BACKGROUND
     img = Image.new("RGBA", (WIDTH, HEIGHT), BG_COLOR)
     draw = ImageDraw.Draw(img)
 
@@ -247,9 +244,11 @@ def create_dashboard(weather):
     updated_time = time.strftime("Updated: %H:%M")
     draw.text((780, 5), updated_time, fill=LINE_COLOR, font=font_tiny, anchor="rt")
 
-    # 1. TOP LEFT: Main Condition (WITH SHADOW)
-    main_icon = get_icon_image(weather['icon_name'], size=(180, 180))
-    paste_with_shadow(img, main_icon, (25, 20), offset=(4, 4)) # Larger shadow for big icon
+    # 1. TOP LEFT: Main Condition (WITH BADGE)
+    # Center X for Main icon = 115 (25 + 180/2)
+    # Center Y for Main icon = 110 (20 + 180/2)
+    main_icon = get_icon_image(weather['icon_name'], size=(140, 140)) # Slightly smaller icon to fit in badge
+    paste_icon_with_badge(img, draw, main_icon, 115, 110, bg_size=170)
     
     # 2. TOP CENTER: Big Temp & Layout
     temp_str = f"{weather['temp']}°"
@@ -276,8 +275,11 @@ def create_dashboard(weather):
     
     for i, (icon_name, val_text) in enumerate(stats_rows):
         y = start_y + (i * gap)
-        icon = get_icon_image(icon_name, size=(38, 38))
-        paste_with_shadow(img, icon, (600, y), offset=(2, 2)) # Subtle shadow for small icons
+        # Center of small icon column is roughly X=620
+        # Y center is y + 20 (half of gap)
+        icon = get_icon_image(icon_name, size=(30, 30))
+        paste_icon_with_badge(img, draw, icon, 620, y + 20, bg_size=42)
+        
         draw.text((780, y + 20), val_text, fill=TEXT_COLOR, font=font_val, anchor="rm")
 
     # 4. MIDDLE: Graph
@@ -299,8 +301,9 @@ def create_dashboard(weather):
         
         draw.text((x + 40, 360), day['day'], fill=TEXT_COLOR, font=font_forecast, anchor="mm")
         
-        day_icon = get_icon_image(day['icon_name'], size=(85, 85))
-        paste_with_shadow(img, day_icon, (x, 375), offset=(3, 3)) # Medium shadow
+        day_icon = get_icon_image(day['icon_name'], size=(70, 70))
+        # Icon center: x + 40 (center of col), y=415
+        paste_icon_with_badge(img, draw, day_icon, x + 40, 415, bg_size=85)
         
         draw.text((x + 40, 465), f"{day['high']}° / {day['low']}°", fill=TEXT_COLOR, font=font_forecast, anchor="mm")
 
