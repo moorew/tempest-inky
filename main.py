@@ -102,7 +102,9 @@ def fetch_weather():
         if 'status' in r_obs and r_obs['status'].get('status_code') != 0:
              print(f"API Error: {r_obs}")
              return None
-        if 'obs' not in r_obs:
+       
+        if 'obs' not in r_obs or len(r_obs['obs']) == 0:
+             print("API returned empty observations.")
              return None
              
         obs = r_obs['obs'][0]
