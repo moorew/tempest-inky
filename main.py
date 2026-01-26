@@ -2,7 +2,7 @@ import sys
 import time
 import os
 import requests
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 # --- HARDWARE CHECK ---
 try:
@@ -30,17 +30,19 @@ FONT_BOLD = os.path.join(ASSETS, "font_bold.ttf")
 WIDTH = 800
 HEIGHT = 480
 
-# --- "SUGAR FRUIT" PALETTE ---
-COL_COLD = (146, 151, 200)  # #9297C8
-COL_COOL = (182, 199, 150)  # #B6C796
-COL_MILD = (246, 193, 167)  # #F6C1A7
-COL_WARM = (247, 203, 154)  # #F7CB9A
-COL_HOT  = (238, 112, 54)   # #EE7036
+# --- LIGHT MODE PALETTE ---
+# Slightly darkened versions of "Sugar Fruit" for better contrast on white
+BG_COLOR = (255, 255, 255, 255) # Pure White
+TEXT_COLOR = (0, 0, 0)          # Pure Black
+SHADOW_COLOR = (200, 200, 200)  # Light Grey for Icon Shadows
+LINE_COLOR = (0, 0, 0)          # Black Dividers
 
-# --- DARK MODE CONSTANTS ---
-BG_COLOR = (0, 0, 0, 255)    # Opaque Black
-TEXT_COLOR = (255, 255, 255) # White Text
-LINE_COLOR = (100, 100, 100) # Subtle Grey
+# Temp Colors (Darkened slightly for visibility on white)
+COL_COLD = (116, 121, 170)  # Darker Periwinkle
+COL_COOL = (152, 169, 120)  # Darker Sage
+COL_MILD = (216, 163, 137)  # Darker Peach
+COL_WARM = (217, 173, 124)  # Darker Sand
+COL_HOT  = (208, 82, 24)    # Darker Orange
 
 # --- LOGIC HELPERS ---
 
@@ -111,6 +113,28 @@ def get_icon_image(icon_name, size=(100, 100)):
             except: pass
             
     return Image.new("RGBA", size, (0,0,0,0))
+
+# --- NEW HELPER: DROP SHADOW PASTER ---
+def paste_with_shadow(base_img, icon, pos, offset=(3, 3)):
+    """
+    Creates a dark silhouette of the icon and pastes it behind the real icon.
+    This makes white clouds visible on a white background.
+    """
+    # 1. Extract the alpha channel (the shape of the icon)
+    alpha = icon.getchannel('A')
+    
+    # 2. Create a solid grey image of the same size
+    shadow = Image.new('RGBA', icon.size, (200, 200, 200, 255)) # Light Grey Shadow
+    
+    # 3. Apply the icon's shape to the grey image
+    shadow.putalpha(alpha)
+    
+    # 4. Paste the shadow first (offset)
+    shadow_pos = (pos[0] + offset[0], pos[1] + offset[1])
+    base_img.paste(shadow, shadow_pos, shadow)
+    
+    # 5. Paste the real icon on top
+    base_img.paste(icon, pos, icon)
 
 # --- GRAPH ENGINE ---
 
@@ -199,6 +223,7 @@ def fetch_weather():
         return None
 
 def create_dashboard(weather):
+    # WHITE BACKGROUND
     img = Image.new("RGBA", (WIDTH, HEIGHT), BG_COLOR)
     draw = ImageDraw.Draw(img)
 
@@ -207,25 +232,13 @@ def create_dashboard(weather):
         return img
 
     try:
-        # --- FONT LOADING ---
         font_huge = ImageFont.truetype(FONT_LIGHT, 130)
-        
-        # INCREASED: Center "Clear" from 28 -> 35
         font_condition = ImageFont.truetype(FONT_BOLD, 35)
-        
-        # INCREASED: Center "Feels Like" from 20 -> 25
         font_feels = ImageFont.truetype(FONT_BOLD, 25)
-        
-        # INCREASED: Weekly Forecast from 20 -> 22
         font_forecast = ImageFont.truetype(FONT_BOLD, 22)
-        
-        # Stats (Wind/Rain) - Keep at 25
         font_val = ImageFont.truetype(FONT_BOLD, 25) 
-        
-        # Graph Title & Timestamp
         font_label = ImageFont.truetype(FONT_BOLD, 20)
         font_tiny = ImageFont.truetype(FONT_LIGHT, 16)
-        
     except Exception as e:
         print(f"❌ FONT ERROR: {e}")
         return img
@@ -234,19 +247,17 @@ def create_dashboard(weather):
     updated_time = time.strftime("Updated: %H:%M")
     draw.text((780, 5), updated_time, fill=LINE_COLOR, font=font_tiny, anchor="rt")
 
-    # 1. TOP LEFT: Main Condition
+    # 1. TOP LEFT: Main Condition (WITH SHADOW)
     main_icon = get_icon_image(weather['icon_name'], size=(180, 180))
-    img.paste(main_icon, (25, 20), main_icon) 
+    paste_with_shadow(img, main_icon, (25, 20), offset=(4, 4)) # Larger shadow for big icon
     
     # 2. TOP CENTER: Big Temp & Layout
     temp_str = f"{weather['temp']}°"
     draw.text((380, 30), temp_str, fill=get_temp_color(weather['temp']), font=font_huge, anchor="mt")
     
-    # Bigger "Feels Like"
     feels_str = f"Feels Like {weather['feels_like']}°"
     draw.text((380, 160), feels_str, fill=TEXT_COLOR, font=font_feels, anchor="mm")
     
-    # Bigger Condition (Pushed down slightly to 195 to account for bigger feels like)
     draw.text((380, 195), weather['summary'], fill=TEXT_COLOR, font=font_condition, anchor="mm")
 
     # 3. TOP RIGHT: Rich Stats Grid
@@ -266,38 +277,31 @@ def create_dashboard(weather):
     for i, (icon_name, val_text) in enumerate(stats_rows):
         y = start_y + (i * gap)
         icon = get_icon_image(icon_name, size=(38, 38))
-        img.paste(icon, (600, y), icon) 
+        paste_with_shadow(img, icon, (600, y), offset=(2, 2)) # Subtle shadow for small icons
         draw.text((780, y + 20), val_text, fill=TEXT_COLOR, font=font_val, anchor="rm")
 
-    # 4. MIDDLE: Graph (Pushed Down & Shrunken)
+    # 4. MIDDLE: Graph
     if 'hourly_temps' in weather:
-        # Title: y=225 -> 235 (10px lower)
         draw.text((40, 235), "24hr Trend", fill=TEXT_COLOR, font=font_label)
         
         low = min(weather['hourly_temps'])
         high = max(weather['hourly_temps'])
         draw.text((760, 235), f"L:{low}°  H:{high}°", fill=TEXT_COLOR, font=font_label, anchor="rs")
 
-        # Graph Box: y=250 -> 260. Bottom 315 (Height 55px)
         graph_box = (40, 260, 760, 315)
         draw_graph_hatching(draw, weather['hourly_temps'], graph_box)
 
-    # 5. BOTTOM: Forecast (Pushed Down slightly)
-    # Line: y=330 -> 340
+    # 5. BOTTOM: Forecast
     draw.line([(40, 340), (760, 340)], fill=LINE_COLOR, width=3)
-    
     start_x = 50
     for i, day in enumerate(weather['forecast']):
         x = start_x + (i * 150)
         
-        # Day: y=350 -> 360
         draw.text((x + 40, 360), day['day'], fill=TEXT_COLOR, font=font_forecast, anchor="mm")
         
         day_icon = get_icon_image(day['icon_name'], size=(85, 85))
-        # Icon: y=365 -> 375
-        img.paste(day_icon, (x, 375), day_icon)
+        paste_with_shadow(img, day_icon, (x, 375), offset=(3, 3)) # Medium shadow
         
-        # Temps: y=460 -> 465 (Safe Zone, larger font)
         draw.text((x + 40, 465), f"{day['high']}° / {day['low']}°", fill=TEXT_COLOR, font=font_forecast, anchor="mm")
 
     return img
