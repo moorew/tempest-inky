@@ -30,18 +30,18 @@ FONT_BOLD = os.path.join(ASSETS, "font_bold.ttf")
 WIDTH = 800
 HEIGHT = 480
 
-# --- HIGH CONTRAST LIGHT PALETTE ---
+# --- HIGH CONTRAST PALETTE (SATURATED) ---
 BG_COLOR = (255, 255, 255, 255) # Pure White
 TEXT_COLOR = (0, 0, 0)          # Pure Black
-BADGE_COLOR = (50, 50, 50)      # Dark Charcoal (Background for icons)
-LINE_COLOR = (0, 0, 0)          # Black Dividers
+BADGE_COLOR = (50, 50, 50)      # Dark Charcoal
+LINE_COLOR = (0, 0, 0)          # Black
 
-# Deepened "Sugar Fruit" colors for visibility on White
-COL_COLD = (60, 60, 110)    # Navy Blue
-COL_COOL = (80, 100, 60)    # Forest Green
-COL_MILD = (160, 90, 60)    # Terra Cotta
-COL_WARM = (180, 110, 40)   # Dark Ochre
-COL_HOT  = (200, 50, 20)    # Deep Red/Orange
+# DEEP SATURATED COLORS (Maximum Contrast)
+COL_COLD = (0, 0, 139)      # Dark Blue
+COL_COOL = (0, 100, 0)      # Dark Green
+COL_MILD = (160, 82, 45)    # Sienna (Brown/Orange)
+COL_WARM = (178, 34, 34)    # Fire Brick Red
+COL_HOT  = (255, 0, 0)      # Pure Red
 
 # --- LOGIC HELPERS ---
 
@@ -113,25 +113,16 @@ def get_icon_image(icon_name, size=(100, 100)):
             
     return Image.new("RGBA", size, (0,0,0,0))
 
-# --- NEW VISUAL HELPER: BADGES ---
+# --- VISUAL HELPER: BADGES ---
 def paste_icon_with_badge(base_img, draw, icon, center_x, center_y, bg_size=100):
-    """
-    Draws a dark circle (Badge) first, then pastes the icon on top.
-    This ensures white icons are visible on white paper.
-    """
-    # 1. Draw the Badge
     r = bg_size / 2
     draw.ellipse(
         [(center_x - r, center_y - r), (center_x + r, center_y + r)],
         fill=BADGE_COLOR
     )
-    
-    # 2. Center the Icon on the Badge
-    # (Icon size might be different than badge size, usually smaller padding looks nice)
     w, h = icon.size
     paste_x = int(center_x - (w / 2))
     paste_y = int(center_y - (h / 2))
-    
     base_img.paste(icon, (paste_x, paste_y), icon)
 
 # --- GRAPH ENGINE ---
@@ -229,13 +220,19 @@ def create_dashboard(weather):
         return img
 
     try:
-        font_huge = ImageFont.truetype(FONT_LIGHT, 130)
+        # --- BOLD FONTS EVERYWHERE ---
+        # Huge Temp: Switched from LIGHT to BOLD for visibility
+        font_huge = ImageFont.truetype(FONT_BOLD, 130)
+        
         font_condition = ImageFont.truetype(FONT_BOLD, 35)
         font_feels = ImageFont.truetype(FONT_BOLD, 25)
         font_forecast = ImageFont.truetype(FONT_BOLD, 22)
         font_val = ImageFont.truetype(FONT_BOLD, 25) 
         font_label = ImageFont.truetype(FONT_BOLD, 20)
-        font_tiny = ImageFont.truetype(FONT_LIGHT, 16)
+        
+        # Timestamp: Switched from LIGHT to BOLD
+        font_tiny = ImageFont.truetype(FONT_BOLD, 16)
+        
     except Exception as e:
         print(f"❌ FONT ERROR: {e}")
         return img
@@ -245,9 +242,7 @@ def create_dashboard(weather):
     draw.text((780, 5), updated_time, fill=LINE_COLOR, font=font_tiny, anchor="rt")
 
     # 1. TOP LEFT: Main Condition (WITH BADGE)
-    # Center X for Main icon = 115 (25 + 180/2)
-    # Center Y for Main icon = 110 (20 + 180/2)
-    main_icon = get_icon_image(weather['icon_name'], size=(140, 140)) # Slightly smaller icon to fit in badge
+    main_icon = get_icon_image(weather['icon_name'], size=(140, 140))
     paste_icon_with_badge(img, draw, main_icon, 115, 110, bg_size=170)
     
     # 2. TOP CENTER: Big Temp & Layout
@@ -275,8 +270,6 @@ def create_dashboard(weather):
     
     for i, (icon_name, val_text) in enumerate(stats_rows):
         y = start_y + (i * gap)
-        # Center of small icon column is roughly X=620
-        # Y center is y + 20 (half of gap)
         icon = get_icon_image(icon_name, size=(30, 30))
         paste_icon_with_badge(img, draw, icon, 620, y + 20, bg_size=42)
         
@@ -302,7 +295,6 @@ def create_dashboard(weather):
         draw.text((x + 40, 360), day['day'], fill=TEXT_COLOR, font=font_forecast, anchor="mm")
         
         day_icon = get_icon_image(day['icon_name'], size=(70, 70))
-        # Icon center: x + 40 (center of col), y=415
         paste_icon_with_badge(img, draw, day_icon, x + 40, 415, bg_size=85)
         
         draw.text((x + 40, 465), f"{day['high']}° / {day['low']}°", fill=TEXT_COLOR, font=font_forecast, anchor="mm")
