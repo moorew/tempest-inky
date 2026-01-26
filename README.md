@@ -1,21 +1,20 @@
-# Tempest Inky Dashboard 🌩️
+# Tempest Inky Dashboard V2 🌩️
 
-A clean, high-contrast weather dashboard for the [Pimoroni Inky Impression 7.3"](https://shop.pimoroni.com/products/inky-impression-7-3) powered by a [Tempest Weather System](https://weatherflow.com/tempest-weather-system/).
+A rich, high-contrast weather dashboard for the [Pimoroni Inky Impression 7.3"](https://shop.pimoroni.com/products/inky-impression-7-3) powered by a [Tempest Weather System](https://weatherflow.com/tempest-weather-system/).
 
 <img src="dashboard-preview.jpg" width="600" alt="Dashboard Preview">
-<br>
-<img src="IRL.jpg" width="600" alt="IRL Image">
 
 ## The Story
 I have dreamed of building a custom weather display like this for years, but I never felt I had the technical ability to pull it off. This project was "vibe coded" with the help of Google Gemini acting as my pair programmer.
 
 It is a passion project, built by a hobbyist for hobbyists. I welcome any suggestions, forks, or pull requests from those who really know what they are doing to help make the code cleaner and better!
 
-## Features
-* **Crisp E-Paper Design:** Uses the **Merriweather** Serif font for a classic "newspaper" aesthetic that looks great on e-ink.
-* **Smart Colors:** Logic-based coloring (Green/Orange/Red) for temperature, wind, and UV comfort levels based on hardware capabilities.
+## V2 Features (New!)
+* **Dark Mode Aesthetic:** A pure black background with high-contrast white text, designed to make the e-ink colors pop.
+* **"Sugar Fruit" Palette:** Sophisticated temperature coloring that shifts from **Periwinkle (Cold)** to **Sage**, **Peach**, **Sand**, and **Burnt Orange (Hot)**.
+* **Dynamic Trend Graph:** A custom-built 24-hour temperature graph with gradient hatching that visualizes the warming or cooling trend of the day.
+* **Rich Data:** Now displays "Feels Like" temp, Rain Accumulation (mm), Humidity, Pressure, UV Index, and specific Beaufort Scale wind icons.
 * **Forecast Integration:** 5-Day forecast row populated by the Tempest "Better Forecast" API.
-* **Reliable:** Auto-recovers from network issues and runs automatically via cron.
 
 ## Hardware Required
 * **Raspberry Pi:** Works on Zero 2 W, 3, 4, or 5.
@@ -41,20 +40,22 @@ chmod +x install.sh
 ### Configuration
 **You must add your Tempest credentials for the dashboard to work.**
 
-⚠️ Station ID: Find this on the Tempest website (Settings > Stations > public-url-id).
+Get your Station ID: Find this on the Tempest website (Settings > Stations > public-url-id).
 
-⚠️ API Token: Generate a Personal Use Token here: [Tempest Settings > Data Authorizations](https://tempestwx.com/settings/tokens).
+Get your API Token: Generate a Personal Use Token here: Tempest Settings > Data Authorizations.
 
-  **1. Open the script:** [nano main.py](https://github.com/moorew/tempest-inky/blob/main/main.py)
-    
-  **2. Locate the CONFIGURATION section at the top and paste your details:**
-    
-    ```
-    STATION_ID = "12345"
-    TOKEN = "your-long-token-string"`
-    ```
-    
-  **3. Save and exit (Ctrl+X, Y, Enter).**
+Create the secrets file:
+
+`nano secrets.py`
+Paste your details into the file:
+
+```
+STATION_ID = "12345"
+TOKEN = "your-long-token-string"
+```
+Save and exit.
+
+_Note: secrets.py is ignored by git, so your keys will remain safe._
 
 ### Run It
 
@@ -71,8 +72,6 @@ This is a non-commercial passion project built by a hobbyist, for hobbyists. I w
 All data and assets belong to their respective creators:
 
 * **Weather Data:** Powered by the [Tempest API](https://weatherflow.github.io/Tempest/api/).
-* **Icons:** [Weather Icons](https://erikflowers.github.io/weather-icons/) by Erik Flowers (Licensed under SIL OFL 1.1).
-* **Typography:** [Merriweather](https://fonts.google.com/specimen/Merriweather) by Sorkin Type (Licensed under SIL OFL 1.1).
 * **Hardware Library:** [Inky](https://github.com/pimoroni/inky) by Pimoroni.
 
 ### Prerequisite: Remote Access
