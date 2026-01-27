@@ -1,79 +1,88 @@
-# Tempest Inky Dashboard V2 🌩️
+# Tempest Weather Dashboard 🌩️
 
-A rich, high-contrast weather dashboard for the [Pimoroni Inky Impression 7.3"](https://shop.pimoroni.com/products/inky-impression-7-3) powered by a [Tempest Weather System](https://weatherflow.com/tempest-weather-system/).
+A rich, high-contrast weather dashboard that adapts to its environment. It powers a hardware **E-Ink Display** on Raspberry Pi and runs as a beautiful **Desktop App** on Windows.
 
-<img src="dashboard-preview.jpg" width="600" alt="Dashboard Preview">
+Powered by the [Tempest Weather System](https://weatherflow.com/tempest-weather-system/).
+
+<p align="center">
+  <img src="dashboard-preview.jpg" width="45%" alt="E-Ink Mode">
+  <img src="assets/desktop_preview.png" width="45%" alt="Desktop Mode">
+</p>
 
 ## The Story
-I have dreamed of building a custom weather display like this for years, but I never felt I had the technical ability to pull it off. This project was "vibe coded" with the help of Google Gemini acting as my pair programmer.
+I have dreamed of building a custom weather display for years. This project was "vibe coded" with the help of Google Gemini acting as my pair programmer. It started as a dedicated hardware project for a Raspberry Pi but has evolved into a cross-platform dashboard that shares a single drawing engine.
 
-It is a passion project, built by a hobbyist for hobbyists. I welcome any suggestions, forks, or pull requests from those who really know what they are doing to help make the code cleaner and better!
+## Features
+### 🎨 Dual Rendering Engine
+The code detects where it is running and adapts the visual style automatically:
+* **E-Ink Mode (Raspberry Pi):** Uses a "Vivid Bar" graph style with pure hardware pigments (Blue/Green/Orange/Red) to avoid dithering artifacts. High-contrast white background for readability.
+* **Desktop Mode (Windows):** Switches to a "Dark Mode" aesthetic with a **Cubic Spline Smoothed Graph** and beautiful alpha-blended gradient fills.
 
-## V2 Features (New!)
-* **Dark Mode Aesthetic:** A pure black background with high-contrast white text, designed to make the e-ink colors pop.
-* **"Sugar Fruit" Palette:** Sophisticated temperature coloring that shifts from **Periwinkle (Cold)** to **Sage**, **Peach**, **Sand**, and **Burnt Orange (Hot)**.
-* **Dynamic Trend Graph:** A custom-built 24-hour temperature graph with gradient hatching that visualizes the warming or cooling trend of the day.
-* **Rich Data:** Now displays "Feels Like" temp, Rain Accumulation (mm), Humidity, Pressure, UV Index, and specific Beaufort Scale wind icons.
-* **Forecast Integration:** 5-Day forecast row populated by the Tempest "Better Forecast" API.
+### 📊 Rich Data
+* **Dynamic Trend Graph:** Visualizes the 24-hour temperature trend (cooling vs. warming).
+* **Smart Coloring:** Temperature values change color dynamically (Freezing, Cold, Cool, Mild, Warm, Hot).
+* **Full Stats:** Feels Like, Wind Speed (km/h) & Direction, Rain Accumulation, Humidity, Pressure, and UV Index.
+* **5-Day Forecast:** Populated by the Tempest "Better Forecast" API.
 
-## Hardware Required
-* **Raspberry Pi:** Works on Zero 2 W, 3, 4, or 5.
+## Hardware Mode (Raspberry Pi)
+### Requirements
+* **Raspberry Pi:** Zero 2 W, 3, 4, or 5.
 * **Display:** [Pimoroni Inky Impression 7.3"](https://shop.pimoroni.com/products/inky-impression-7-3) (7-color e-paper).
-* **Weather Station:** [Tempest Weather System](https://weatherflow.com/tempest-weather-system/).
 
-## Installation (Fresh Install)
-These instructions assume you are starting with a fresh Raspberry Pi OS (Bookworm or newer) image.
+### Installation
+1.  Clone the repo:
+    ```bash
+    git clone [https://github.com/moorew/tempest-inky.git](https://github.com/moorew/tempest-inky.git)
+    cd tempest-inky
+    ```
+2.  Run the installer (sets up venv, installs dependencies):
+    ```bash
+    chmod +x install.sh
+    ./install.sh
+    ```
+3.  Add your API keys to `secrets.py`.
 
-### Clone the Repo
-```
-git clone https://github.com/moorew/tempest-inky.git
-cd tempest-inky
-```
+## Desktop Mode (Windows)
+You can run this dashboard right on your PC without any specialized hardware.
 
-### Run the Installer
-I have included a script to set up the Python environment, install dependencies (Pillow, Inky, Requests), and download the necessary fonts automatically.
-```
-chmod +x install.sh
-./install.sh
-```
+### Running from Source
+1.  Install Python 3.
+2.  Install dependencies:
+    ```powershell
+    pip install requests pillow customtkinter
+    ```
+3.  Run the app:
+    ```powershell
+    python desktop.py
+    ```
 
-### Configuration
+### Building the EXE (for distribution)
+If you want to create a standalone `.exe` or installer:
+1.  Install the build tools:
+    ```powershell
+    pip install pyinstaller
+    ```
+2.  Run the build command (bundles all assets and icons):
+    ```powershell
+    pyinstaller --noconsole --onefile --icon="assets/icon.ico" --add-data "assets;assets" --add-data "secrets.py;." desktop.py
+    ```
+3.  Your app will appear in the `dist/` folder.
+
+## Configuration
 **You must add your Tempest credentials for the dashboard to work.**
 
-Get your Station ID: Find this on the Tempest website (Settings > Stations > public-url-id).
-
-Get your API Token: Generate a Personal Use Token here: Tempest Settings > Data Authorizations.
-
-Create the secrets file:
-
-`nano secrets.py`
-Paste your details into the file:
-
-```
-STATION_ID = "12345"
-TOKEN = "your-long-token-string"
-```
-Save and exit.
-
-_Note: secrets.py is ignored by git, so your keys will remain safe._
-
-### Run It
-
-**Test the dashboard manually:**
-```
-./venv/bin/python3 main.py`
-```
-
-✅ If successful, the installer has already set up a cron job to refresh the screen every 20 minutes automatically.
+1.  **Station ID:** Find this on the Tempest website (Settings > Stations > public-url-id).
+2.  **API Token:** Generate a Personal Use Token at Tempest Settings > Data Authorizations.
+3.  Create a file named `secrets.py` in the root folder:
+    ```python
+    STATION_ID = "12345"
+    TOKEN = "your-long-token-string"
+    ```
 
 ## Credits & Licenses
-This is a non-commercial passion project built by a hobbyist, for hobbyists. I welcome suggestions and improvements!
-
-All data and assets belong to their respective creators:
+This is a non-commercial passion project built by a hobbyist, for hobbyists.
 
 * **Weather Data:** Powered by the [Tempest API](https://weatherflow.github.io/Tempest/api/).
 * **Hardware Library:** [Inky](https://github.com/pimoroni/inky) by Pimoroni.
-
-### Prerequisite: Remote Access
-I highly recommend installing [Tailscale](https://tailscale.com) on your Pi for easy, secure SSH access from anywhere without opening ports.
-
+* **UI Library:** [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter).
+* **Icon set (with e-ink design updates):** [Meteocons by Bas.dev](https://bas.dev/work/meteocons).
