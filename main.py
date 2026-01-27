@@ -35,9 +35,8 @@ BG_COLOR = (255, 255, 255, 255) # Pure White
 TEXT_COLOR = (0, 0, 0)          # Pure Black
 LINE_COLOR = (0, 0, 0)          # Black
 
-# UPDATED: Softer Badge Color (Steel Grey)
-# Old was (50,50,50). New is (130,130,130)
-BADGE_COLOR = (130, 130, 130)   
+# UPDATED: Lighter Silver Badge (was 130, now 170)
+BADGE_COLOR = (170, 170, 170)   
 
 # DEEP SATURATED COLORS (Maximum Contrast)
 COL_COLD = (0, 0, 139)      # Dark Blue
@@ -168,7 +167,8 @@ def draw_graph_hatching(draw, data_points, box):
         px = x1 + (i * step_px)
         py = y2 - ((val - min_val) / val_range * h)
         points.append((px, py))
-    draw.line(points, fill=TEXT_COLOR, width=3)
+    # Added stroke_width=2 to graph line to make it thicker
+    draw.line(points, fill=TEXT_COLOR, width=4) 
 
 def fetch_weather():
     try:
@@ -238,7 +238,8 @@ def create_dashboard(weather):
 
     # --- TOP RIGHT: Timestamp ---
     updated_time = time.strftime("Updated: %H:%M")
-    draw.text((780, 5), updated_time, fill=LINE_COLOR, font=font_tiny, anchor="rt")
+    # stroke_width=1 adds a 1px outline to make thin fonts look bold
+    draw.text((780, 5), updated_time, fill=LINE_COLOR, font=font_tiny, anchor="rt", stroke_width=1)
 
     # 1. TOP LEFT: Main Condition (WITH BADGE)
     main_icon = get_icon_image(weather['icon_name'], size=(140, 140))
@@ -246,12 +247,13 @@ def create_dashboard(weather):
     
     # 2. TOP CENTER: Big Temp & Layout
     temp_str = f"{weather['temp']}°"
+    # No stroke needed on 130px, but added for consistency
     draw.text((380, 30), temp_str, fill=get_temp_color(weather['temp']), font=font_huge, anchor="mt")
     
     feels_str = f"Feels Like {weather['feels_like']}°"
-    draw.text((380, 160), feels_str, fill=TEXT_COLOR, font=font_feels, anchor="mm")
+    draw.text((380, 160), feels_str, fill=TEXT_COLOR, font=font_feels, anchor="mm", stroke_width=1)
     
-    draw.text((380, 195), weather['summary'], fill=TEXT_COLOR, font=font_condition, anchor="mm")
+    draw.text((380, 195), weather['summary'], fill=TEXT_COLOR, font=font_condition, anchor="mm", stroke_width=1)
 
     # 3. TOP RIGHT: Rich Stats Grid
     draw.line([(580, 20), (580, 215)], fill=LINE_COLOR, width=2)
@@ -272,36 +274,39 @@ def create_dashboard(weather):
         icon = get_icon_image(icon_name, size=(30, 30))
         paste_icon_with_badge(img, draw, icon, 620, y + 20, bg_size=42)
         
-        draw.text((780, y + 20), val_text, fill=TEXT_COLOR, font=font_val, anchor="rm")
+        # Stroke width added here to fix the "too light" issue
+        draw.text((780, y + 20), val_text, fill=TEXT_COLOR, font=font_val, anchor="rm", stroke_width=1)
 
-    # 4. MIDDLE: Graph
+    # 4. MIDDLE: Graph (MOVED UP 15px)
     if 'hourly_temps' in weather:
-        draw.text((40, 235), "24hr Trend", fill=TEXT_COLOR, font=font_label)
+        # Title: y=235 -> 220
+        draw.text((40, 220), "24hr Trend", fill=TEXT_COLOR, font=font_label, stroke_width=1)
         
         low = min(weather['hourly_temps'])
         high = max(weather['hourly_temps'])
-        draw.text((760, 235), f"L:{low}°  H:{high}°", fill=TEXT_COLOR, font=font_label, anchor="rs")
+        draw.text((760, 220), f"L:{low}°  H:{high}°", fill=TEXT_COLOR, font=font_label, anchor="rs", stroke_width=1)
 
-        graph_box = (40, 260, 760, 315)
+        # Graph Box: y=260-315 -> y=245-300
+        graph_box = (40, 245, 760, 300)
         draw_graph_hatching(draw, weather['hourly_temps'], graph_box)
 
-    # 5. BOTTOM: Forecast (LIFTED UP FOR SAFETY)
-    # Line: y=340 -> 325 (Shifted -15)
-    draw.line([(40, 325), (760, 325)], fill=LINE_COLOR, width=3)
+    # 5. BOTTOM: Forecast
+    # Line: y=325 -> 310 (Moved UP to create space below)
+    draw.line([(40, 310), (760, 310)], fill=LINE_COLOR, width=3)
     
     start_x = 50
     for i, day in enumerate(weather['forecast']):
         x = start_x + (i * 150)
         
-        # Day: y=360 -> 345
-        draw.text((x + 40, 345), day['day'], fill=TEXT_COLOR, font=font_forecast, anchor="mm")
+        # Day: y=345 -> 335 (Slightly up)
+        draw.text((x + 40, 335), day['day'], fill=TEXT_COLOR, font=font_forecast, anchor="mm", stroke_width=1)
         
         day_icon = get_icon_image(day['icon_name'], size=(70, 70))
-        # Icon Center: y=415 -> 400
-        paste_icon_with_badge(img, draw, day_icon, x + 40, 400, bg_size=85)
+        # Icon Center: y=400 -> 410 (Moved DOWN slightly to clear text)
+        paste_icon_with_badge(img, draw, day_icon, x + 40, 410, bg_size=85)
         
-        # Temps: y=465 -> 450 (Plenty of room at bottom now)
-        draw.text((x + 40, 450), f"{day['high']}° / {day['low']}°", fill=TEXT_COLOR, font=font_forecast, anchor="mm")
+        # Temps: y=450 -> 465 (Moved DOWN near bottom)
+        draw.text((x + 40, 465), f"{day['high']}° / {day['low']}°", fill=TEXT_COLOR, font=font_forecast, anchor="mm", stroke_width=1)
 
     return img
 
