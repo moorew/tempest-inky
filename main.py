@@ -2,7 +2,7 @@ import sys
 import time
 import os
 import requests
-import importlib.util # Added for secrets handling
+import importlib.util 
 from PIL import Image, ImageDraw, ImageFont
 
 # --- HARDWARE CHECK ---
@@ -41,7 +41,7 @@ else:
         print("No secrets found. Using Dummy Data.")
 
 URL_OBS = f"https://swd.weatherflow.com/swd/rest/observations/station/{STATION_ID}?token={TOKEN}"
-URL_FORECAST = f"https://swd.weatherflow.com/swd/rest/better_forecast?station_id={STATION_ID}&token={TOKEN}"
+URL_FORECAST = f"https://swd.weatherflow.com/swd/rest/better_forecast?station_id={STATION_ID}?token={TOKEN}"
 
 # --- PATH CONFIGURATION ---
 def get_base_path():
@@ -344,10 +344,20 @@ def create_dashboard(weather, theme_name="inky"):
             draw.text((780, y + 20), val, fill=TEXT, font=font_val, anchor="rm", stroke_width=1)
 
         if 'hourly_temps' in weather:
-            # MOVED DOWN TO 250
             draw.text((40, 250), "24hr Trend", fill=TEXT, font=font_label, stroke_width=1)
-            draw.text((760, 250), f"L:{min(weather['hourly_temps'])}°  H:{max(weather['hourly_temps'])}°", fill=TEXT, font=font_label, anchor="rs", stroke_width=1)
-            # GRAPH MOVED TO 280
+            
+            # --- HIGH/LOW TEMP LOGIC ---
+            t_min = min(weather['hourly_temps'])
+            t_max = max(weather['hourly_temps'])
+            
+            if not theme['is_desktop']:
+                # INKY: Round to integer to prevent "17.0" looking like "170"
+                t_str = f"L:{int(round(t_min))}°  H:{int(round(t_max))}°"
+            else:
+                # DESKTOP: Keep original decimal precision
+                t_str = f"L:{t_min}°  H:{t_max}°"
+            
+            draw.text((760, 250), t_str, fill=TEXT, font=font_label, anchor="rs", stroke_width=1)
             draw_graph(draw, weather['hourly_temps'], (40, 280, 760, 310), theme)
 
         draw.line([(40, 315), (760, 315)], fill=LINE, width=3)
