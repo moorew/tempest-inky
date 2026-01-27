@@ -13,11 +13,34 @@ except ImportError:
     INKY_AVAILABLE = False
 
 # --- CONFIGURATION ---
-try:
-    from secrets import STATION_ID, TOKEN
-except ImportError:
-    STATION_ID = "00000"
-    TOKEN = "dummy"
+import importlib.util
+
+# 1. Define where to look for secrets (Home Folder is safest for Windows/Linux mix)
+user_home = os.path.expanduser("~")
+secret_path = os.path.join(user_home, "secrets.py")
+
+STATION_ID = "00000"
+TOKEN = "dummy"
+
+# 2. Try to load from Home Folder first (Best for distributed app)
+if os.path.exists(secret_path):
+    try:
+        spec = importlib.util.spec_from_file_location("secrets", secret_path)
+        user_secrets = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(user_secrets)
+        STATION_ID = user_secrets.STATION_ID
+        TOKEN = user_secrets.TOKEN
+        print(f"Loaded configuration from {secret_path}")
+    except Exception as e:
+        print(f"Error loading external secrets: {e}")
+
+# 3. Fallback: Try local folder (Best for Dev / Raspberry Pi)
+else:
+    try:
+        from secrets import STATION_ID, TOKEN
+        print("Loaded configuration from local folder")
+    except ImportError:
+        print("No secrets found. Using Dummy Data.")
 
 URL_OBS = f"https://swd.weatherflow.com/swd/rest/observations/station/{STATION_ID}?token={TOKEN}"
 URL_FORECAST = f"https://swd.weatherflow.com/swd/rest/better_forecast?station_id={STATION_ID}&token={TOKEN}"
