@@ -2,7 +2,7 @@ import sys
 import time
 import os
 import requests
-import math
+import importlib.util # Added for secrets handling
 from PIL import Image, ImageDraw, ImageFont
 
 # --- HARDWARE CHECK ---
@@ -13,8 +13,6 @@ except ImportError:
     INKY_AVAILABLE = False
 
 # --- CONFIGURATION ---
-import importlib.util
-
 # 1. Define where to look for secrets (Home Folder is safest for Windows/Linux mix)
 user_home = os.path.expanduser("~")
 secret_path = os.path.join(user_home, "secrets.py")
@@ -364,14 +362,18 @@ def create_dashboard(weather, theme_name="inky"):
         print(f"Error drawing dashboard: {e}")
         return img
     return img
+
 def main():
     print("Fetching weather...")
     weather = fetch_weather()
     img = create_dashboard(weather, theme_name="inky")
     if INKY_AVAILABLE:
         from inky.auto import auto
-        auto().set_image(img).show()
+        display = auto()
+        display.set_image(img)
+        display.show()
     else:
         img.convert("RGB").save("dashboard-preview.jpg")
+
 if __name__ == "__main__":
     main()
