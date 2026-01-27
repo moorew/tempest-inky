@@ -13,14 +13,11 @@ except ImportError:
     INKY_AVAILABLE = False
 
 # --- CONFIGURATION ---
-# 1. Define where to look for secrets (Home Folder is safest for Windows/Linux mix)
 user_home = os.path.expanduser("~")
 secret_path = os.path.join(user_home, "secrets.py")
-
 STATION_ID = "00000"
 TOKEN = "dummy"
 
-# 2. Try to load from Home Folder first (Best for distributed app)
 if os.path.exists(secret_path):
     try:
         spec = importlib.util.spec_from_file_location("secrets", secret_path)
@@ -31,8 +28,6 @@ if os.path.exists(secret_path):
         print(f"Loaded configuration from {secret_path}")
     except Exception as e:
         print(f"Error loading external secrets: {e}")
-
-# 3. Fallback: Try local folder (Best for Dev / Raspberry Pi)
 else:
     try:
         from secrets import STATION_ID, TOKEN
@@ -41,7 +36,7 @@ else:
         print("No secrets found. Using Dummy Data.")
 
 URL_OBS = f"https://swd.weatherflow.com/swd/rest/observations/station/{STATION_ID}?token={TOKEN}"
-URL_FORECAST = f"https://swd.weatherflow.com/swd/rest/better_forecast?station_id={STATION_ID}?token={TOKEN}"
+URL_FORECAST = f"https://swd.weatherflow.com/swd/rest/better_forecast?station_id={STATION_ID}&token={TOKEN}"
 
 # --- PATH CONFIGURATION ---
 def get_base_path():
@@ -53,36 +48,17 @@ def get_base_path():
 
 BASE_DIR = get_base_path()
 ASSETS_ROOT = os.path.join(BASE_DIR, "assets")
-
 FONT_LIGHT = os.path.join(ASSETS_ROOT, "font_light.ttf")
 FONT_BOLD = os.path.join(ASSETS_ROOT, "font_bold.ttf")
 
 WIDTH = 800
 HEIGHT = 480
 
-# --- THEMES ---
 STYLES = {
-    "inky": {
-        "asset_folder": "inky",
-        "bg_color": (255, 255, 255, 255),
-        "text_color": (0, 0, 0),
-        "line_color": (0, 0, 0),
-        "graph_type": "vivid_bar",
-        "graph_width": 4,
-        "is_desktop": False
-    },
-    "desktop": {
-        "asset_folder": "desktop",
-        "bg_color": (30, 30, 40, 255),
-        "text_color": (240, 240, 240),
-        "line_color": (80, 80, 90),
-        "graph_type": "gradient_fill",
-        "graph_width": 3,
-        "is_desktop": True
-    }
+    "inky": {"asset_folder": "inky", "bg_color": (255, 255, 255, 255), "text_color": (0, 0, 0), "line_color": (0, 0, 0), "graph_type": "vivid_bar", "graph_width": 4, "is_desktop": False},
+    "desktop": {"asset_folder": "desktop", "bg_color": (30, 30, 40, 255), "text_color": (240, 240, 240), "line_color": (80, 80, 90), "graph_type": "gradient_fill", "graph_width": 3, "is_desktop": True}
 }
 
-# --- PALETTES ---
 COL_COLD = (0, 0, 200)      
 COL_COOL = (0, 150, 0)      
 COL_MILD = (255, 200, 0)    
@@ -95,11 +71,9 @@ DT_MILD = (255, 222, 173)
 DT_WARM = (255, 160, 122)
 DT_HOT  = (255, 99, 71)
 
-# --- HELPERS ---
 def get_wind_direction(degrees):
     dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
-    ix = round(degrees / (360. / len(dirs)))
-    return dirs[ix % len(dirs)]
+    return dirs[round(degrees / (360. / len(dirs))) % len(dirs)]
 
 def get_beaufort_icon_name(speed_mph):
     if speed_mph < 1: return "wind-beaufort-0"
@@ -130,11 +104,7 @@ def get_temp_color(temp, theme_mode="inky"):
     return COL_HOT
 
 def interpolate_rgb(c1, c2, factor):
-    return (
-        int(c1[0] + (c2[0] - c1[0]) * factor),
-        int(c1[1] + (c2[1] - c1[1]) * factor),
-        int(c1[2] + (c2[2] - c1[2]) * factor)
-    )
+    return (int(c1[0] + (c2[0] - c1[0]) * factor), int(c1[1] + (c2[1] - c1[1]) * factor), int(c1[2] + (c2[2] - c1[2]) * factor))
 
 def get_smooth_color(temp):
     if temp <= 0: return DT_COLD
@@ -152,19 +122,15 @@ def get_icon_image(icon_name, theme_config, size=(100, 100)):
         elif 'rain' in clean_name: suffix = 'rain'
         elif 'snow' in clean_name: suffix = 'snow'
         elif 'fog' in clean_name: suffix = 'fog'
-    
     candidates = [f"weather-icons_{clean_name}.png", f"weather-icons_{suffix}.png", f"{clean_name}.png"]
+    
     theme_folder = os.path.join(ASSETS_ROOT, theme_config['asset_folder'])
     for filename in candidates:
-        path = os.path.join(theme_folder, filename)
-        if os.path.exists(path):
-            try: return Image.open(path).convert("RGBA").resize(size, Image.Resampling.LANCZOS)
-            except: pass
+        if os.path.exists(os.path.join(theme_folder, filename)):
+            return Image.open(os.path.join(theme_folder, filename)).convert("RGBA").resize(size, Image.Resampling.LANCZOS)
     for filename in candidates:
-        path = os.path.join(ASSETS_ROOT, filename)
-        if os.path.exists(path):
-            try: return Image.open(path).convert("RGBA").resize(size, Image.Resampling.LANCZOS)
-            except: pass
+        if os.path.exists(os.path.join(ASSETS_ROOT, filename)):
+            return Image.open(os.path.join(ASSETS_ROOT, filename)).convert("RGBA").resize(size, Image.Resampling.LANCZOS)
     return Image.new("RGBA", size, (0,0,0,0))
 
 def interpolate(val_start, val_end, fraction):
@@ -178,26 +144,21 @@ def get_spline_point(p0, p1, p2, p3, t):
     return (2 * p1 - 2 * p2 + v0 + v1) * t3 + (-3 * p1 + 3 * p2 - 2 * v0 - v1) * t2 + v0 * t + p1
 
 def draw_graph(draw, data_points, box, theme_config):
-    # Base Layout
     x1, y1, x2, y2 = box
     w, h = x2 - x1, y2 - y1
     if not data_points: return
 
-    # --- HEADROOM LOGIC ---
-    # Add 20% breathing room to the top and bottom so the graph floats
     min_val, max_val = min(data_points), max(data_points)
     real_range = max_val - min_val
-    if real_range < 5: real_range = 5 # Prevent flatline errors
+    if real_range < 5: real_range = 5
     
-    padding = real_range * 0.2 # 20% total padding (10% top, 10% bottom)
+    padding = real_range * 0.2
     visual_min = min_val - (padding / 2)
     visual_max = max_val + (padding / 2)
     val_range = visual_max - visual_min
-
     step_px = w / (len(data_points) - 1)
 
     if theme_config['graph_type'] == "vivid_bar":
-        # INKY STYLE
         for px in range(0, int(w), 2): 
             index = int(px / step_px)
             if index >= len(data_points) - 1: break
@@ -215,54 +176,43 @@ def draw_graph(draw, data_points, box, theme_config):
             points.append((px, py))
         draw.line(points, fill=theme_config['text_color'], width=theme_config['graph_width'])
     else:
-        # DESKTOP STYLE
         draw_graph_supersampled(draw._image, data_points, box, theme_config, visual_min, visual_max, val_range)
 
 def draw_graph_supersampled(bg_img, data_points, box, theme_config, v_min, v_max, v_range):
     x1, y1, x2, y2 = box
     w, h = x2 - x1, y2 - y1
-    
     SCALE = 4
     sw, sh = int(w * SCALE), int(h * SCALE)
     super_img = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
     super_draw = ImageDraw.Draw(super_img)
-    
     raw_points = []
     for i, val in enumerate(data_points):
-        # Add slight X padding (+8px) so it doesn't hug the left wall
         px = (i * (sw / (len(data_points) - 1))) + 8 
         py = sh - ((val - v_min) / v_range * sh)
         py = max(0, min(sh, py))
         raw_points.append((px, py))
-    
     spline_points = [raw_points[0]] + raw_points + [raw_points[-1]]
     smooth_curve = []
     steps_per_segment = 40 
-    
     for i in range(len(raw_points) - 1):
         p0, p1, p2, p3 = spline_points[i], spline_points[i+1], spline_points[i+2], spline_points[i+3]
         for t_step in range(steps_per_segment):
             t = t_step / steps_per_segment
             sx = get_spline_point(p0[0], p1[0], p2[0], p3[0], t)
             sy = get_spline_point(p0[1], p1[1], p2[1], p3[1], t)
-            # Clip X to stop it drawing backwards or off canvas
             sx = max(0, min(sw, sx))
             norm_val = (sh - sy) / sh
             val = (norm_val * v_range) + v_min
             smooth_curve.append((sx, sy, val))
-    
     smooth_curve.append((raw_points[-1][0], raw_points[-1][1], data_points[-1]))
-
     for sx, sy, val in smooth_curve:
         base_col = get_smooth_color(val)
         fill_col = (base_col[0], base_col[1], base_col[2], 50) 
         super_draw.line([(sx, sy), (sx, sh)], fill=fill_col, width=int(2*SCALE))
-
     for i in range(len(smooth_curve) - 1):
         start, end = smooth_curve[i], smooth_curve[i+1]
         line_col = get_smooth_color(start[2])
         super_draw.line([(start[0], start[1]), (end[0], end[1])], fill=line_col, width=int(3*SCALE))
-
     smooth_graph = super_img.resize((int(w), int(h)), Image.Resampling.LANCZOS)
     bg_img.paste(smooth_graph, (x1, y1), smooth_graph)
 
@@ -281,14 +231,15 @@ def fetch_weather():
             d_high, d_low = round(day['air_temp_high'], 0), round(day['air_temp_low'], 0)
             forecast_data.append({'day': time.strftime("%a", time.localtime(day['day_start_local'])), 'high': int(d_high), 'low': int(d_low), 'icon_name': day.get('icon', 'cloudy')})
         
-        # WIND LOGIC: Convert m/s to km/h
-        wind_ms = obs.get('wind_avg', 0)
+        # WIND LOGIC: Robust handling for None values
+        wind_ms = obs.get('wind_avg')
+        if wind_ms is None: wind_ms = 0 # Safety defaults
         wind_kmh = round(wind_ms * 3.6, 1)
 
         return {
             "temp": round(obs.get('air_temperature', 0), 1),
             "feels_like": int(round(current.get('feels_like', 0))),
-            "wind_speed": wind_kmh, # km/h value
+            "wind_speed": wind_kmh,
             "wind_dir": get_wind_direction(obs.get('wind_direction', 0)),
             "wind_icon": get_beaufort_icon_name(wind_ms * 2.237),
             "pressure": round(obs.get('sea_level_pressure', 0), 0),
@@ -301,16 +252,27 @@ def fetch_weather():
             "forecast": forecast_data,
             "hourly_temps": [x['air_temperature'] for x in hourly[:24]]
         }
-    except: return None
+    except Exception as e:
+        print(f"❌ Error fetching weather: {e}") # PRINT ERROR TO CONSOLE
+        return None
 
 def create_dashboard(weather, theme_name="inky"):
     theme = STYLES.get(theme_name, STYLES["inky"])
     img = Image.new("RGBA", (WIDTH, HEIGHT), theme['bg_color'])
-    if not weather: return img
+    draw = ImageDraw.Draw(img)
+    draw._image = img 
+
+    # --- ERROR HANDLING SCREEN ---
+    if not weather:
+        print("Drawing Error Screen...")
+        try:
+            font_err = ImageFont.truetype(FONT_BOLD, 40)
+            draw.text((WIDTH//2, HEIGHT//2), "DATA FETCH ERROR\nCheck Console Logs", fill=theme['text_color'], font=font_err, anchor="mm", align="center")
+        except:
+            pass
+        return img
+
     try:
-        draw = ImageDraw.Draw(img)
-        draw._image = img 
-        
         font_huge = ImageFont.truetype(FONT_BOLD, 130)
         font_condition = ImageFont.truetype(FONT_BOLD, 35) 
         font_feels = ImageFont.truetype(FONT_BOLD, 25) 
@@ -331,7 +293,7 @@ def create_dashboard(weather, theme_name="inky"):
 
         draw.line([(580, 25), (580, 215)], fill=LINE, width=2)
         stats = [
-            (weather['wind_icon'], f"{weather['wind_speed']} km/h {weather['wind_dir']}"), # FORCE UNIT HERE
+            (weather['wind_icon'], f"{weather['wind_speed']} km/h {weather['wind_dir']}"), 
             ("rain", f"{weather['rain_today']} mm"), 
             ("humidity", f"{weather['humidity']}%"),
             ("barometer", f"{weather['pressure']} hPa"),
@@ -345,16 +307,13 @@ def create_dashboard(weather, theme_name="inky"):
 
         if 'hourly_temps' in weather:
             draw.text((40, 250), "24hr Trend", fill=TEXT, font=font_label, stroke_width=1)
-            
-            # --- HIGH/LOW TEMP LOGIC ---
             t_min = min(weather['hourly_temps'])
             t_max = max(weather['hourly_temps'])
             
+            # --- ROUNDING FIX FOR INKY ---
             if not theme['is_desktop']:
-                # INKY: Round to integer to prevent "17.0" looking like "170"
                 t_str = f"L:{int(round(t_min))}°  H:{int(round(t_max))}°"
             else:
-                # DESKTOP: Keep original decimal precision
                 t_str = f"L:{t_min}°  H:{t_max}°"
             
             draw.text((760, 250), t_str, fill=TEXT, font=font_label, anchor="rs", stroke_width=1)
@@ -369,7 +328,7 @@ def create_dashboard(weather, theme_name="inky"):
             draw.text((x + 40, 455), f"{day['high']}° / {day['low']}°", fill=TEXT, font=font_forecast, anchor="mm", stroke_width=1)
 
     except Exception as e:
-        print(f"Error drawing dashboard: {e}")
+        print(f"❌ Error drawing dashboard: {e}")
         return img
     return img
 
@@ -379,9 +338,9 @@ def main():
     img = create_dashboard(weather, theme_name="inky")
     if INKY_AVAILABLE:
         from inky.auto import auto
-        display = auto()
-        display.set_image(img)
-        display.show()
+        display = auto()        # FIXED: Split commands
+        display.set_image(img)  # FIXED
+        display.show()          # FIXED
     else:
         img.convert("RGB").save("dashboard-preview.jpg")
 
