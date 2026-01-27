@@ -35,12 +35,13 @@ BG_COLOR = (255, 255, 255, 255) # Pure White
 TEXT_COLOR = (0, 0, 0)          # Pure Black
 LINE_COLOR = (0, 0, 0)          # Black
 
-# REVERTED: Sophisticated "Dark Sugar Fruit" Palette
-COL_COLD = (60, 60, 110)    # Navy Blue
-COL_COOL = (80, 100, 60)    # Forest Green
-COL_MILD = (160, 90, 60)    # Terra Cotta
-COL_WARM = (180, 110, 40)   # Dark Ochre
-COL_HOT  = (200, 50, 20)    # Deep Red/Orange
+# --- VIVID GRAPH PALETTE (HARDWARE NATIVE) ---
+# Using pure pigments avoids "muddy" dithering
+COL_COLD = (0, 0, 200)      # Pure Blue
+COL_COOL = (0, 150, 0)      # Pure Green
+COL_MILD = (255, 200, 0)    # Pure Yellow
+COL_WARM = (255, 120, 0)    # Pure Orange
+COL_HOT  = (200, 0, 0)      # Pure Red
 
 # --- LOGIC HELPERS ---
 
@@ -157,6 +158,7 @@ def draw_graph_hatching(draw, data_points, box):
         
         screen_x = x1 + px
         
+        # RESTORED: Vivid Colors for the bars
         bar_color = get_temp_color(val)
         draw.line([(screen_x, py), (screen_x, y2)], fill=bar_color, width=1)
 
@@ -166,6 +168,8 @@ def draw_graph_hatching(draw, data_points, box):
         py = y2 - ((val - visual_min) / val_range * h)
         py = max(y1, min(y2, py))
         points.append((px, py))
+        
+    # Trend line stays BLACK for contrast
     draw.line(points, fill=TEXT_COLOR, width=4) 
 
 def fetch_weather():
@@ -221,16 +225,13 @@ def create_dashboard(weather):
         return img
 
     try:
-        # FONT SETUP
         font_huge = ImageFont.truetype(FONT_BOLD, 130)
-        font_condition = ImageFont.truetype(FONT_BOLD, 35) # Used for Summary
-        font_feels = ImageFont.truetype(FONT_BOLD, 25) # Used for Feels Like line
-        
+        font_condition = ImageFont.truetype(FONT_BOLD, 35) 
+        font_feels = ImageFont.truetype(FONT_BOLD, 25) 
         font_forecast = ImageFont.truetype(FONT_BOLD, 22)
         font_val = ImageFont.truetype(FONT_BOLD, 25) 
         font_label = ImageFont.truetype(FONT_BOLD, 20)
         font_tiny = ImageFont.truetype(FONT_LIGHT, 16)
-        
     except Exception as e:
         print(f"❌ FONT ERROR: {e}")
         return img
@@ -245,14 +246,14 @@ def create_dashboard(weather):
     
     # 2. TOP CENTER: Big Temp
     temp_str = f"{weather['temp']}°"
-    draw.text((380, 50), temp_str, fill=get_temp_color(weather['temp']), font=font_huge, anchor="mt", stroke_width=5)
+    # PURE BLACK
+    draw.text((380, 50), temp_str, fill=TEXT_COLOR, font=font_huge, anchor="mt", stroke_width=5)
     
-    # SINGLE LINE "FEELS LIKE" (Restored)
-    # y=180 (Centered under temp)
+    # SINGLE LINE "FEELS LIKE"
     feels_str = f"Feels Like {weather['feels_like']}°"
     draw.text((380, 180), feels_str, fill=TEXT_COLOR, font=font_feels, anchor="mm", stroke_width=1)
     
-    # Summary: "Clear" (Big, 35px) - y=215
+    # Summary
     draw.text((380, 215), weather['summary'], fill=TEXT_COLOR, font=font_condition, anchor="mm", stroke_width=1)
 
     # 3. TOP RIGHT: Rich Stats Grid
@@ -275,7 +276,7 @@ def create_dashboard(weather):
         img.paste(icon, (600, int(y)), icon)
         draw.text((780, y + 20), val_text, fill=TEXT_COLOR, font=font_val, anchor="rm", stroke_width=1)
 
-    # 4. MIDDLE: Graph
+    # 4. MIDDLE: Graph (VIVID COLOR RETURN)
     if 'hourly_temps' in weather:
         draw.text((40, 245), "24hr Trend", fill=TEXT_COLOR, font=font_label, stroke_width=1)
         low = min(weather['hourly_temps'])
