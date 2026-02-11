@@ -114,15 +114,77 @@ def get_smooth_color(temp):
     else: return interpolate_rgb(DT_MILD, DT_HOT, (temp-20)/10)
 
 def get_icon_image(icon_name, theme_config, size=(100, 100)):
+    # Clean up the input string
     clean_name = icon_name.lower().replace(".svg", "").replace(".png", "")
-    name_map = {'clear-day': 'clear-day', 'clear-night': 'clear-night', 'rainy': 'rain', 'snow': 'snow', 'sleet': 'sleet', 'wind': 'wind', 'foggy': 'fog', 'cloudy': 'cloudy', 'partly-cloudy-day': 'partly-cloudy-day', 'partly-cloudy-night': 'partly-cloudy-night', 'thunderstorm': 'thunderstorms'}
+    
+    # --- MAPPING: Tempest API Name -> Your File Suffix ---
+    name_map = {
+        # Clear & Clouds
+        'clear-day': 'clear-day',
+        'clear-night': 'clear-night',
+        'cloudy': 'cloudy',
+        'partly-cloudy-day': 'partly-cloudy-day',
+        'partly-cloudy-night': 'partly-cloudy-night',
+        'foggy': 'fog',
+        'wind': 'wind',
+
+        # Rain
+        'rainy': 'rain',
+        'possibly-rainy-day': 'partly-cloudy-day-rain',
+        'possibly-rainy-night': 'partly-cloudy-night-rain',
+
+        # Snow
+        'snow': 'snow',
+        'possibly-snow-day': 'partly-cloudy-day-snow',
+        'possibly-snow-night': 'partly-cloudy-night-snow',
+
+        # Sleet & Mix (This fixes your Tuesday issue!)
+        'sleet': 'sleet',
+        'wintry-mix': 'sleet',  # Maps "wintry-mix" to "weather-icons_sleet.png"
+        'possibly-sleet-day': 'partly-cloudy-day-sleet',
+        'possibly-sleet-night': 'partly-cloudy-night-sleet',
+
+        # Thunder
+        'thunderstorm': 'thunderstorms',
+        'possibly-thunderstorm-day': 'thunderstorms-day',
+        'possibly-thunderstorm-night': 'thunderstorms-night'
+    }
+
+    # 1. Try to find a direct map
     suffix = name_map.get(clean_name, clean_name)
+    
+    # 2. Safety Fallback: If no map found, guess based on keywords
     if suffix == clean_name:
         if 'thunder' in clean_name: suffix = 'thunderstorms'
         elif 'rain' in clean_name: suffix = 'rain'
         elif 'snow' in clean_name: suffix = 'snow'
         elif 'fog' in clean_name: suffix = 'fog'
-    candidates = [f"weather-icons_{clean_name}.png", f"weather-icons_{suffix}.png", f"{clean_name}.png"]
+        elif 'sleet' in clean_name or 'mix' in clean_name: suffix = 'sleet'
+
+    # 3. Build the list of filenames to look for
+    candidates = [
+        f"weather-icons_{suffix}.png",       # Priority 1: Mapped name (e.g. weather-icons_sleet.png)
+        f"weather-icons_{clean_name}.png",   # Priority 2: Original name
+        f"{suffix}.png"                      # Priority 3: Short name
+    ]
+    
+    theme_folder = os.path.join(ASSETS_ROOT, theme_config['asset_folder'])
+    
+    # 4. Check Theme Folder first
+    for filename in candidates:
+        full_path = os.path.join(theme_folder, filename)
+        if os.path.exists(full_path):
+            return Image.open(full_path).convert("RGBA").resize(size, Image.Resampling.LANCZOS)
+            
+    # 5. Check Assets Root second
+    for filename in candidates:
+        full_path = os.path.join(ASSETS_ROOT, filename)
+        if os.path.exists(full_path):
+            return Image.open(full_path).convert("RGBA").resize(size, Image.Resampling.LANCZOS)
+            
+    # 6. If still nothing, print error and return blank (prevents crash)
+    print(f"⚠️  Still missing icon for: '{clean_name}' (Tried: {candidates})")
+    return Image.new("RGBA", size, (0,0,0,0))
     
     theme_folder = os.path.join(ASSETS_ROOT, theme_config['asset_folder'])
     for filename in candidates:
