@@ -14,8 +14,7 @@ The included installation script handles everything: installing system dependenc
 
 **1. Clone the repository**
 ```bash
-git clone [https://github.com/moorew/tempest-inky.git](https://github.com/moorew/tempest-inky.git)
-cd tempest-inky
+git clone https://github.com/moorew/tempest-inky.git ~cd tempest-inky
 ```
 
 **2. Run the installer**
