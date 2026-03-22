@@ -1,106 +1,48 @@
-# Tempest Weather Dashboard 🌩️
+# Tempest Inky
 
-A rich, high-contrast weather dashboard that adapts to its environment. It powers a hardware **E-Ink Display** on Raspberry Pi and runs as a beautiful **Desktop App** on Windows.
+A Python application for the Raspberry Pi that displays a clean, readable weather dashboard on a Pimoroni Inky e-ink display, pulling live data directly from a WeatherFlow Tempest weather station.
 
-Powered by the [Tempest Weather System](https://weatherflow.com/tempest-weather-system/).
+## Prerequisites
 
-<p align="center">
-  <img src="dashboard-preview.jpg" width="45%" alt="E-Ink Mode">
-  <img src="assets/desktop_preview.png" width="45%" alt="Desktop Mode">
-</p>
+* **Hardware:** A Raspberry Pi (Zero 2 W or newer recommended) and a Pimoroni Inky display.
+* **OS:** Raspberry Pi OS (Bookworm or newer, 32-bit or 64-bit).
+* **Tempest API:** A WeatherFlow Tempest station ID and a Personal Use Token. You can generate a token by logging into the [WeatherFlow Tempest API page](https://weatherflow.github.io/Tempest/api/).
 
-## The Story
-I have dreamed of building a custom weather display for years. This project was "vibe coded" with the help of Google Gemini acting as my pair programmer. It started as a dedicated hardware project for a Raspberry Pi but has evolved into a cross-platform dashboard that shares a single drawing engine.
+## Automated Installation
 
-## Features
-### 🎨 Dual Rendering Engine
-The code detects where it is running and adapts the visual style automatically:
-* **E-Ink Mode (Raspberry Pi):** Uses a "Vivid Bar" graph style with pure hardware pigments (Blue/Green/Orange/Red) to avoid dithering artifacts. High-contrast white background for readability.
-* **Desktop Mode (Windows):** Switches to a "Dark Mode" aesthetic with a **Cubic Spline Smoothed Graph** and beautiful alpha-blended gradient fills.
+The included installation script handles everything: installing system dependencies (to bypass slow library compilation on older Pis), enabling the necessary SPI/I2C hardware ports, applying OS-specific pin fixes, and setting up an automated refresh schedule.
 
-### 📊 Rich Data
-* **Dynamic Trend Graph:** Visualizes the 24-hour temperature trend (cooling vs. warming).
-* **Smart Coloring:** Temperature values change color dynamically (Freezing, Cold, Cool, Mild, Warm, Hot).
-* **Full Stats:** Feels Like, Wind Speed (km/h) & Direction, Rain Accumulation, Humidity, Pressure, and UV Index.
-* **5-Day Forecast:** Populated by the Tempest "Better Forecast" API.
+**1. Clone the repository**
+```bash
+git clone [https://github.com/moorew/tempest-inky.git](https://github.com/moorew/tempest-inky.git)
+cd tempest-inky
+```
 
-## Hardware Mode (Raspberry Pi)
-### Requirements
-* **Raspberry Pi:** Zero 2 W, 3, 4, or 5.
-* **Display:** [Pimoroni Inky Impression 7.3"](https://shop.pimoroni.com/products/inky-impression-7-3) (7-color e-paper).
+**2. Run the installer**
+Make the script executable and run it. It will prompt you for your Tempest Station ID and API Token during the setup.
+```bash
+chmod +x install.sh
+./install.sh
+```
 
-### Installation
-1.  Clone the repo:
-    ```bash
-    git clone [https://github.com/moorew/tempest-inky.git](https://github.com/moorew/tempest-inky.git)
-    cd tempest-inky
-    ```
-2.  Run the installer (sets up venv, installs dependencies):
-    ```bash
-    chmod +x install.sh
-    ./install.sh
-    ```
-3.  Create a `secrets.py` file in the folder (see Configuration below).
+**3. Reboot**
+The installer enables hardware interfaces that require a system restart to take effect.
+```bash
+sudo reboot
+```
 
-## Desktop Mode (Windows)
-You can run this dashboard right on your PC without any specialized hardware.
+## How it Works
 
-### Running from Source
-1.  Install Python 3.
-2.  Install dependencies:
-    ```powershell
-    pip install requests pillow customtkinter
-    ```
-3.  Run the app:
-    ```powershell
-    python desktop.py
-    ```
+* **Virtual Environment:** The script uses a local Python virtual environment (`venv`) with the `--system-site-packages` flag. This safely isolates the project while taking advantage of fast, pre-compiled system libraries like NumPy and Pillow.
+* **Automated Refresh:** The installer adds a cron job to automatically run the script every 15 minutes. This is the ideal refresh rate to keep weather data current without causing permanent ghosting or wear on the e-ink display. 
+* **Logging:** If the screen isn't updating, you can check the background logs by running: `cat /tmp/tempest-inky.log`.
 
-### Building the EXE (for distribution)
-If you want to create a standalone `.exe` or installer:
-1.  Install the build tools:
-    ```powershell
-    pip install pyinstaller
-    ```
-2.  Run the build command (bundles all assets and icons):
-    ```powershell
-    pyinstaller --noconsole --onefile --icon="assets/icon.ico" --add-data "assets;assets" desktop.py
-    ```
-3.  Your app will appear in the `dist/` folder.
+## Manual Execution
 
-## Configuration
-**You must add your Tempest credentials for the dashboard to work.**
+If you ever want to force a manual refresh of the screen outside of the 15-minute schedule, navigate to the folder, activate the virtual environment, and run the script:
 
-1.  **Station ID:** Find this on the Tempest website (Settings > Stations > public-url-id).
-2.  **API Token:** Generate a Personal Use Token at Tempest Settings > Data Authorizations.
-
-### Option A: Windows Installer Users
-If you installed the app using the `.exe` installer:
-1.  Navigate to your **User Home Folder** (e.g., `C:\Users\YourName\`).
-2.  Create a file named `secrets.py`.
-3.  Add your keys:
-    ```python
-    STATION_ID = "12345"
-    TOKEN = "your-long-token-string"
-    ```
-4.  Restart the app.
-
-### Option B: Raspberry Pi / Developers
-If you are running the source code directly (or on a Pi):
-1.  Create the `secrets.py` file inside the project folder:
-    ```bash
-    nano secrets.py
-    ```
-2.  Paste your details:
-    ```python
-    STATION_ID = "12345"
-    TOKEN = "your-long-token-string"
-    ```
-3.  Save and exit. The script will look here first.
-
-## Credits & Licenses
-This is a non-commercial passion project built by a hobbyist, for hobbyists.
-
-* **Weather Data:** Powered by the [Tempest API](https://weatherflow.github.io/Tempest/api/).
-* **Hardware Library:** [Inky](https://github.com/pimoroni/inky) by Pimoroni.
-* **UI Library:** [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter).
+```bash
+cd ~/tempest-inky
+source venv/bin/activate
+python3 main.py
+```

@@ -1,65 +1,56 @@
 #!/bin/bash
 
-# Tempest Inky Dashboard Installer
-# Installs dependencies, fonts, and sets up auto-run.
+echo "========================================"
+echo "  Tempest Inky Dashboard Setup          "
+echo "========================================"
 
-set -e  # Exit on error
-
-echo "🌩️  Installing Tempest Inky Dashboard..."
-
-# 1. Install System Dependencies
-echo "📦 Installing system libraries..."
+# 1. Install system dependencies (bypasses heavy numpy compilation)
+echo "Installing system dependencies..."
 sudo apt update
-sudo apt install -y python3-full python3-pip libopenjp2-7 libtiff6 git unzip wget
+sudo apt install -y git python3-venv python3-numpy python3-pil python3-requests
 
-# 2. Setup Python Environment
-echo "🐍 Setting up Python virtual environment..."
-if [ ! -d "venv" ]; then
-    python3 -m venv venv --system-site-packages
+# 2. Enable Hardware Interfaces (SPI and I2C)
+echo "Enabling SPI and I2C..."
+sudo raspi-config nonint do_spi 0
+sudo raspi-config nonint do_i2c 0
+
+# 3. Apply Bookworm SPI Chip Select Fix
+CONFIG_FILE="/boot/firmware/config.txt"
+if ! grep -q "dtoverlay=spi0-0cs" "$CONFIG_FILE"; then
+    echo "Applying Bookworm SPI fix to config.txt..."
+    sudo sed -i '/dtparam=spi=on/a dtoverlay=spi0-0cs' "$CONFIG_FILE"
 fi
+
+# 4. Set up Virtual Environment
+echo "Setting up Python virtual environment..."
+python3 -m venv --system-site-packages venv
 source venv/bin/activate
+pip install inky
 
-# 3. Install Python Libraries
-echo "📚 Installing Python dependencies..."
-pip install -r requirements.txt
-
-# 4. Download Assets (Fonts)
-echo "🎨 Downloading fonts..."
-mkdir -p assets
-
-# Download Weather Icons (Source: Erik Flowers)
-if [ ! -f "assets/weathericons.ttf" ]; then
-    echo "   - Downloading Weather Icons..."
-    wget -q -O assets/weathericons.ttf https://github.com/erikflowers/weather-icons/raw/master/font/weathericons-regular-webfont.ttf
+# 5. Configure Secrets
+if [ ! -f secrets.py ]; then
+    echo ""
+    echo "--- Configuration ---"
+    read -p "Enter your Tempest Station ID: " station_id
+    read -p "Enter your Tempest API Token: " api_token
+    
+    cat <<EOF > secrets.py
+STATION_ID = "$station_id"
+TOKEN = "$api_token"
+EOF
+    echo "secrets.py created successfully."
+else
+    echo "secrets.py already exists, skipping configuration."
 fi
 
-# Download Merriweather (Source: SorkinType)
-if [ ! -f "assets/Merriweather-Bold.ttf" ]; then
-    echo "   - Downloading Merriweather..."
-    wget -q -O temp_mw.zip https://github.com/SorkinType/Merriweather/archive/refs/heads/master.zip
-    unzip -q -o temp_mw.zip -d temp_mw
-    
-    # Find and move the TTF files regardless of folder structure
-    find temp_mw -name "Merriweather-Bold.ttf" -exec mv {} assets/ \;
-    find temp_mw -name "Merriweather-Regular.ttf" -exec mv {} assets/ \;
-    
-    # Clean up
-    rm -rf temp_mw temp_mw.zip
-fi
+# 6. Set up the 15-minute Cron Job
+echo "Setting up automatic refresh (every 15 minutes)..."
+CRON_CMD="*/15 * * * * cd $(pwd) && $(pwd)/venv/bin/python main.py > /tmp/tempest-inky.log 2>&1"
+# This safely adds the new cron job without deleting any existing ones
+(crontab -l 2>/dev/null | grep -v "tempest-inky"; echo "$CRON_CMD") | crontab -
 
-# 5. Setup Cron (Auto-run)
-echo "⏰ Setting up auto-run (Every 20 mins)..."
-CURRENT_DIR=$(pwd)
-CRON_CMD="*/20 * * * * $CURRENT_DIR/venv/bin/python3 $CURRENT_DIR/main.py >> $CURRENT_DIR/weather.log 2>&1"
-
-# Add to crontab if not already there
-(crontab -l 2>/dev/null | grep -F "main.py") || (crontab -l 2>/dev/null; echo "$CRON_CMD") | crontab -
-
-echo "✅ Installation Complete!"
-echo "--------------------------------------------------------"
-echo "👉 NEXT STEP: Edit main.py and add your API keys:"
-echo "   nano main.py"
-echo ""
-echo "   Then run it manually to test:"
-echo "   ./venv/bin/python3 main.py"
-echo "--------------------------------------------------------"
+echo "========================================"
+echo " Setup Complete! "
+echo " Please REBOOT your Raspberry Pi now to apply the hardware changes."
+echo " Command: sudo reboot"
+echo "========================================"
