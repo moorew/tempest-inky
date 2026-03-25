@@ -45,7 +45,7 @@ fi
 
 # 6. Set up the 15-minute Cron Job
 echo "Setting up automatic refresh (every 15 minutes)..."
-CRON_CMD="*/15 * * * * cd $(pwd) && $(pwd)/venv/bin/python main.py > /tmp/tempest-inky.log 2>&1"
+CRON_CMD="*/15 * * * * cd $(pwd) && $(pwd)/venv/bin/python3 main.py > /tmp/tempest-inky.log 2>&1"
 # This safely adds the new cron job without deleting any existing ones
 (crontab -l 2>/dev/null | grep -v "tempest-inky"; echo "$CRON_CMD") | crontab -
 
