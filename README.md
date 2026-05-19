@@ -89,7 +89,7 @@ The installer will:
 - Ensure your user is in the `spi`, `i2c`, and `gpio` groups
 - Apply the Bookworm SPI chip-select overlay fix
 - Create a self-contained Python virtual environment
-- Prompt you for your Station ID and API token
+- Prompt you for your Station ID and API token, saved as `~/secrets.py`
 - Install a **systemd timer** that refreshes the display every 15 minutes
 
 ### 5. Reboot
@@ -166,7 +166,7 @@ Your API credentials may be wrong, or the Pi has no internet. Check:
 curl -s "https://swd.weatherflow.com/swd/rest/observations/station/YOUR_ID?token=YOUR_TOKEN" | python3 -m json.tool | head -20
 
 # Check secrets file
-cat ~/tempest-inky/secrets.py
+cat ~/secrets.py
 ```
 
 ### SPI / display not detected

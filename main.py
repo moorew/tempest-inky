@@ -1,10 +1,12 @@
+import importlib.util
+import json
+import os
+import socket
 import sys
 import time
-import os
-import json
-import socket
+from functools import lru_cache
+
 import requests
-import importlib.util
 from PIL import Image, ImageDraw, ImageFont
 
 try:
@@ -14,29 +16,21 @@ except ImportError:
     INKY_AVAILABLE = False
 
 user_home = os.path.expanduser("~")
-secret_path = os.path.join(user_home, "secrets.py")
-STATION_ID = "00000"
-TOKEN = "dummy"
+API_BASE_URL = "https://swd.weatherflow.com/swd/rest"
+HTTP_TIMEOUT = 20
+LANCZOS = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
+DITHER_NONE = getattr(getattr(Image, "Dither", Image), "NONE", 0)
 
-if os.path.exists(secret_path):
-    try:
-        spec = importlib.util.spec_from_file_location("secrets", secret_path)
-        user_secrets = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(user_secrets)
-        STATION_ID = user_secrets.STATION_ID
-        TOKEN = user_secrets.TOKEN
-        print(f"Loaded configuration from {secret_path}")
-    except Exception as e:
-        print(f"Error loading external secrets: {e}")
-else:
-    try:
-        from secrets import STATION_ID, TOKEN
-        print("Loaded configuration from local folder")
-    except ImportError:
-        print("No secrets found. Using dummy data.")
-
-URL_OBS      = f"https://swd.weatherflow.com/swd/rest/observations/station/{STATION_ID}?token={TOKEN}"
-URL_FORECAST = f"https://swd.weatherflow.com/swd/rest/better_forecast?station_id={STATION_ID}&token={TOKEN}"
+# Pimoroni Inky Impression 7-color palette.
+INKY_PALETTE = [
+    (0, 0, 0),
+    (255, 255, 255),
+    (0, 255, 0),
+    (0, 0, 255),
+    (255, 0, 0),
+    (255, 255, 0),
+    (255, 128, 0),
+]
 
 PRESSURE_FILE = os.path.join(user_home, ".tempest-pressure.json")
 
@@ -48,7 +42,50 @@ def get_base_path():
         return os.path.dirname(os.path.abspath(__file__))
 
 
-BASE_DIR   = get_base_path()
+def get_app_path():
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def load_secrets_file(path):
+    spec = importlib.util.spec_from_file_location("tempest_user_secrets", path)
+    if spec is None or spec.loader is None:
+        raise ValueError(f"Could not load {path}")
+    user_secrets = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(user_secrets)
+    return str(user_secrets.STATION_ID), str(user_secrets.TOKEN)
+
+
+def load_config():
+    station_id = os.environ.get("TEMPEST_STATION_ID")
+    token = os.environ.get("TEMPEST_TOKEN")
+    if station_id and token:
+        print("Loaded configuration from environment")
+        return station_id, token
+    if station_id or token:
+        print("Incomplete environment configuration; falling back to secrets.py")
+
+    for secret_path in [
+        os.path.join(user_home, "secrets.py"),
+        os.path.join(get_app_path(), "secrets.py"),
+    ]:
+        if not os.path.exists(secret_path):
+            continue
+        try:
+            config = load_secrets_file(secret_path)
+            print(f"Loaded configuration from {secret_path}")
+            return config
+        except Exception as e:
+            print(f"Error loading {secret_path}: {e}")
+
+    print("No secrets found. Using dummy data.")
+    return "00000", "dummy"
+
+
+STATION_ID, TOKEN = load_config()
+
+BASE_DIR = get_base_path()
 ASSETS_ROOT = os.path.join(BASE_DIR, "assets")
 FONT_LIGHT  = os.path.join(ASSETS_ROOT, "font_light.ttf")
 FONT_BOLD   = os.path.join(ASSETS_ROOT, "font_bold.ttf")
@@ -111,16 +148,22 @@ def get_beaufort_icon_name(speed_mph):
 
 def get_uv_icon_name(uv_index):
     uv = int(round(uv_index))
-    if uv <= 0:  return "uv-index"
-    if uv > 11:  uv = 11
+    if uv <= 0:
+        return "uv-index"
+    if uv > 11:
+        uv = 11
     return f"uv-index-{uv}"
 
 
-def get_temp_color(temp, theme_mode="inky"):
-    if temp < 5:  return COL_COLD
-    if temp < 15: return COL_COOL
-    if temp < 22: return COL_MILD
-    if temp < 28: return COL_WARM
+def get_temp_color(temp):
+    if temp < 5:
+        return COL_COLD
+    if temp < 15:
+        return COL_COOL
+    if temp < 22:
+        return COL_MILD
+    if temp < 28:
+        return COL_WARM
     return COL_HOT
 
 
@@ -133,14 +176,25 @@ def interpolate_rgb(c1, c2, factor):
 
 
 def get_smooth_color(temp):
-    if temp <= 0:  return DT_COLD
-    if temp >= 30: return DT_HOT
-    if temp < 10:  return interpolate_rgb(DT_COLD, DT_COOL, temp / 10)
-    if temp < 20:  return interpolate_rgb(DT_COOL, DT_MILD, (temp - 10) / 10)
+    if temp <= 0:
+        return DT_COLD
+    if temp >= 30:
+        return DT_HOT
+    if temp < 10:
+        return interpolate_rgb(DT_COLD, DT_COOL, temp / 10)
+    if temp < 20:
+        return interpolate_rgb(DT_COOL, DT_MILD, (temp - 10) / 10)
     return interpolate_rgb(DT_MILD, DT_HOT, (temp - 20) / 10)
 
 
 def get_icon_image(icon_name, theme_config, size=(100, 100)):
+    icon = _get_icon_image_cached(str(icon_name), theme_config["asset_folder"], int(size[0]), int(size[1]))
+    return icon.copy()
+
+
+@lru_cache(maxsize=256)
+def _get_icon_image_cached(icon_name, asset_folder, width, height):
+    size = (width, height)
     clean = icon_name.lower().replace(".svg", "").replace(".png", "")
 
     name_map = {
@@ -163,33 +217,133 @@ def get_icon_image(icon_name, theme_config, size=(100, 100)):
         "possibly-sleet-night":       "partly-cloudy-night-sleet",
         "thunderstorm":               "thunderstorms",
         "possibly-thunderstorm-day":  "thunderstorms-day",
-        "possibly-thunderstorm-night":"thunderstorms-night",
+        "possibly-thunderstorm-night": "thunderstorms-night",
     }
     suffix = name_map.get(clean, clean)
     if suffix == clean:
-        if "thunder" in clean:          suffix = "thunderstorms"
-        elif "rain" in clean:           suffix = "rain"
-        elif "snow" in clean:           suffix = "snow"
-        elif "fog" in clean:            suffix = "fog"
-        elif "sleet" in clean or "mix" in clean: suffix = "sleet"
+        if "thunder" in clean:
+            suffix = "thunderstorms"
+        elif "rain" in clean:
+            suffix = "rain"
+        elif "snow" in clean:
+            suffix = "snow"
+        elif "fog" in clean:
+            suffix = "fog"
+        elif "sleet" in clean or "mix" in clean:
+            suffix = "sleet"
 
     candidates = [
         f"weather-icons_{suffix}.png",
         f"weather-icons_{clean}.png",
         f"{suffix}.png",
     ]
-    theme_folder = os.path.join(ASSETS_ROOT, theme_config["asset_folder"])
+    theme_folder = os.path.join(ASSETS_ROOT, asset_folder)
     for fn in candidates:
         p = os.path.join(theme_folder, fn)
         if os.path.exists(p):
-            return Image.open(p).convert("RGBA").resize(size, Image.Resampling.LANCZOS)
+            return Image.open(p).convert("RGBA").resize(size, LANCZOS)
     for fn in candidates:
         p = os.path.join(ASSETS_ROOT, fn)
         if os.path.exists(p):
-            return Image.open(p).convert("RGBA").resize(size, Image.Resampling.LANCZOS)
+            return Image.open(p).convert("RGBA").resize(size, LANCZOS)
 
     print(f"Warning: missing icon '{clean}' (tried: {candidates})")
     return Image.new("RGBA", size, (0, 0, 0, 0))
+
+
+@lru_cache(maxsize=32)
+def get_font(path, size):
+    try:
+        return ImageFont.truetype(path, size)
+    except OSError as e:
+        print(f"Font load error for {path}: {e}")
+        return ImageFont.load_default()
+
+
+def text_width(draw, text, font, stroke_width=0):
+    bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
+    return bbox[2] - bbox[0]
+
+
+def text_height(draw, text, font, stroke_width=0):
+    bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
+    return bbox[3] - bbox[1]
+
+
+def trim_to_width(draw, text, font, max_width, stroke_width=0):
+    text = str(text).strip()
+    if text_width(draw, text, font, stroke_width) <= max_width:
+        return text
+
+    suffix = "..."
+    for end in range(len(text), 0, -1):
+        candidate = text[:end].rstrip() + suffix
+        if text_width(draw, candidate, font, stroke_width) <= max_width:
+            return candidate
+    return suffix
+
+
+def wrap_text(draw, text, font, max_width, stroke_width=0):
+    words = str(text).split()
+    if not words:
+        return [""]
+
+    lines = []
+    current = words[0]
+    for word in words[1:]:
+        candidate = f"{current} {word}"
+        if text_width(draw, candidate, font, stroke_width) <= max_width:
+            current = candidate
+        else:
+            lines.append(trim_to_width(draw, current, font, max_width, stroke_width))
+            current = word
+    lines.append(trim_to_width(draw, current, font, max_width, stroke_width))
+    return lines
+
+
+def fit_wrapped_text(draw, text, font_path, start_size, min_size, max_width, max_lines, stroke_width=0):
+    for size in range(start_size, min_size - 1, -1):
+        font = get_font(font_path, size)
+        lines = wrap_text(draw, text, font, max_width, stroke_width)
+        if len(lines) <= max_lines:
+            return lines, font
+
+    font = get_font(font_path, min_size)
+    lines = wrap_text(draw, text, font, max_width, stroke_width)
+    if len(lines) > max_lines:
+        remaining = " ".join(lines[max_lines - 1:])
+        lines = lines[:max_lines - 1] + [
+            trim_to_width(draw, remaining, font, max_width, stroke_width)
+        ]
+    return lines, font
+
+
+def draw_centered_lines(draw, center, lines, font, fill, stroke_width=0, spacing=2):
+    x, center_y = center
+    heights = [text_height(draw, line, font, stroke_width) for line in lines]
+    total_height = sum(heights) + max(0, len(lines) - 1) * spacing
+    y = center_y - total_height / 2
+    for line, height in zip(lines, heights):
+        draw.text((x, y), line, fill=fill, font=font, anchor="mt", stroke_width=stroke_width)
+        y += height + spacing
+
+
+@lru_cache(maxsize=1)
+def get_inky_palette_image():
+    palette_img = Image.new("P", (1, 1))
+    palette = []
+    for color in INKY_PALETTE:
+        palette.extend(color)
+    palette.extend([255, 255, 255] * (256 - len(INKY_PALETTE)))
+    palette_img.putpalette(palette)
+    return palette_img
+
+
+def quantize_for_inky(img):
+    return img.convert("RGB").quantize(
+        palette=get_inky_palette_image(),
+        dither=DITHER_NONE,
+    ).convert("RGB")
 
 
 def interpolate(a, b, t):
@@ -204,7 +358,7 @@ def get_spline_point(p0, p1, p2, p3, t):
     return (2*p1 - 2*p2 + v0 + v1)*t3 + (-3*p1 + 3*p2 - 2*v0 - v1)*t2 + v0*t + p1
 
 
-def draw_graph(draw, data_points, box, theme_config):
+def draw_graph(draw, bg_img, data_points, box, theme_config):
     x1, y1, x2, y2 = box
     w, h = x2 - x1, y2 - y1
     if len(data_points) < 2:
@@ -241,7 +395,7 @@ def draw_graph(draw, data_points, box, theme_config):
         if len(pts) > 1:
             draw.line(pts, fill=theme_config["text_color"], width=theme_config["graph_width"])
     else:
-        draw_graph_supersampled(draw._image, data_points, box, theme_config, v_min, v_max, v_range)
+        draw_graph_supersampled(bg_img, data_points, box, theme_config, v_min, v_max, v_range)
 
 
 def draw_graph_supersampled(bg_img, data_points, box, theme_config, v_min, v_max, v_range):
@@ -273,7 +427,7 @@ def draw_graph_supersampled(bg_img, data_points, box, theme_config, v_min, v_max
     for i in range(len(curve)-1):
         a, b = curve[i], curve[i+1]
         sd.line([(a[0], a[1]), (b[0], b[1])], fill=get_smooth_color(a[2]), width=int(3*S))
-    resized = si.resize((int(w), int(h)), Image.Resampling.LANCZOS)
+    resized = si.resize((int(w), int(h)), LANCZOS)
     bg_img.paste(resized, (x1, y1), resized)
 
 
@@ -304,8 +458,10 @@ def get_pressure_trend(pressure):
         trend = "Steady"
         if prev is not None:
             diff = pressure - prev
-            if diff >  1.0: trend = "Rising"
-            if diff < -1.0: trend = "Falling"
+            if diff > 1.0:
+                trend = "Rising"
+            if diff < -1.0:
+                trend = "Falling"
         with open(PRESSURE_FILE, "w") as f:
             json.dump({"pressure": pressure, "time": time.time()}, f)
         return trend
@@ -319,18 +475,31 @@ def get_pressure_trend(pressure):
 def fetch_weather(retries=3):
     """Fetch from the Tempest API with exponential-backoff retry."""
     last_err = None
+    session = requests.Session()
     for attempt in range(retries):
         if attempt > 0:
             delay = 10 * (2 ** (attempt - 1))
             print(f"Retry {attempt}/{retries-1} in {delay}s...")
             time.sleep(delay)
         try:
-            r_obs = requests.get(URL_OBS, timeout=20).json()
+            obs_response = session.get(
+                f"{API_BASE_URL}/observations/station/{STATION_ID}",
+                params={"token": TOKEN},
+                timeout=HTTP_TIMEOUT,
+            )
+            obs_response.raise_for_status()
+            r_obs = obs_response.json()
             if "obs" not in r_obs or not r_obs["obs"]:
                 raise ValueError("No observations in API response")
             obs = r_obs["obs"][0]
 
-            r_for = requests.get(URL_FORECAST, timeout=20).json()
+            forecast_response = session.get(
+                f"{API_BASE_URL}/better_forecast",
+                params={"station_id": STATION_ID, "token": TOKEN},
+                timeout=HTTP_TIMEOUT,
+            )
+            forecast_response.raise_for_status()
+            r_for = forecast_response.json()
             if "forecast" not in r_for:
                 raise ValueError("No forecast in API response")
             current = r_for.get("current_conditions", {})
@@ -344,15 +513,16 @@ def fetch_weather(retries=3):
             sunrise_str   = time.strftime("%H:%M", time.localtime(sunrise_epoch)) if sunrise_epoch else "--:--"
             sunset_str    = time.strftime("%H:%M", time.localtime(sunset_epoch))  if sunset_epoch  else "--:--"
 
-            forecast_data = []
-            for day in daily[:5]:
-                forecast_data.append({
+            forecast_data = [
+                {
                     "day":        time.strftime("%a", time.localtime(day.get("day_start_local") or 0)),
                     "high":       int(round(day.get("air_temp_high") or 0)),
                     "low":        int(round(day.get("air_temp_low")  or 0)),
                     "icon_name":  day.get("icon", "cloudy"),
-                    "precip_prob":day.get("precip_probability") or 0,
-                })
+                    "precip_prob": day.get("precip_probability") or 0,
+                }
+                for day in daily[:5]
+            ]
 
             wind_ms      = obs.get("wind_avg")  or 0
             wind_gust_ms = obs.get("wind_gust") or 0
@@ -406,26 +576,27 @@ def create_dashboard(weather, theme_name="inky"):
     theme = STYLES.get(theme_name, STYLES["inky"])
     img = Image.new("RGBA", (WIDTH, HEIGHT), theme["bg_color"])
     draw = ImageDraw.Draw(img)
-    draw._image = img
 
     if not weather:
         print("Drawing Error Screen...")
-        try:
-            font_err = ImageFont.truetype(FONT_BOLD, 40)
-            draw.text((WIDTH//2, HEIGHT//2), "DATA FETCH ERROR\nCheck Console Logs",
-                      fill=theme["text_color"], font=font_err, anchor="mm", align="center")
-        except Exception:
-            pass
+        font_err = get_font(FONT_BOLD, 40)
+        draw.text(
+            (WIDTH//2, HEIGHT//2),
+            "DATA FETCH ERROR\nCheck Console Logs",
+            fill=theme["text_color"],
+            font=font_err,
+            anchor="mm",
+            align="center",
+        )
         return img
 
     try:
-        font_huge      = ImageFont.truetype(FONT_BOLD,  130)
-        font_condition = ImageFont.truetype(FONT_BOLD,   35)
-        font_feels     = ImageFont.truetype(FONT_BOLD,   25)
-        font_forecast  = ImageFont.truetype(FONT_BOLD,   22)
-        font_val       = ImageFont.truetype(FONT_BOLD,   25)
-        font_label     = ImageFont.truetype(FONT_BOLD,   20)
-        font_tiny      = ImageFont.truetype(FONT_LIGHT,  16)
+        font_huge      = get_font(FONT_BOLD,  130)
+        font_feels     = get_font(FONT_BOLD,   25)
+        font_forecast  = get_font(FONT_BOLD,   22)
+        font_val       = get_font(FONT_BOLD,   25)
+        font_label     = get_font(FONT_BOLD,   20)
+        font_tiny      = get_font(FONT_LIGHT,  16)
         TEXT, LINE = theme["text_color"], theme["line_color"]
 
         draw.text((780, 5), time.strftime("Updated: %H:%M"), fill=LINE, font=font_tiny, anchor="rt")
@@ -436,7 +607,25 @@ def create_dashboard(weather, theme_name="inky"):
         temp_col = get_smooth_color(weather["temp"]) if theme["is_desktop"] else TEXT
         draw.text((380, 50),  f"{weather['temp']}°",             fill=temp_col, font=font_huge,      anchor="mt", stroke_width=5)
         draw.text((380, 180), f"Feels Like {weather['feels_like']}°", fill=TEXT, font=font_feels, anchor="mm", stroke_width=1)
-        draw.text((380, 215), weather["summary"],                 fill=TEXT, font=font_condition, anchor="mm", stroke_width=1)
+        summary_lines, font_condition = fit_wrapped_text(
+            draw,
+            weather["summary"],
+            FONT_BOLD,
+            start_size=27,
+            min_size=20,
+            max_width=340,
+            max_lines=2,
+            stroke_width=1,
+        )
+        draw_centered_lines(
+            draw,
+            (390, 222),
+            summary_lines,
+            font_condition,
+            TEXT,
+            stroke_width=1,
+            spacing=1,
+        )
 
         draw.line([(580, 25), (580, 215)], fill=LINE, width=2)
         stats = [
@@ -461,7 +650,7 @@ def create_dashboard(weather, theme_name="inky"):
             else:
                 t_str = f"L:{t_min}°  H:{t_max}°"
             draw.text((760, 250), t_str, fill=TEXT, font=font_label, anchor="rs", stroke_width=1)
-            draw_graph(draw, weather["hourly_temps"], (40, 280, 760, 310), theme)
+            draw_graph(draw, img, weather["hourly_temps"], (40, 280, 760, 310), theme)
 
         draw.line([(40, 315), (760, 315)], fill=LINE, width=3)
         for i, day in enumerate(weather["forecast"]):
@@ -473,6 +662,17 @@ def create_dashboard(weather, theme_name="inky"):
 
     except Exception as e:
         print(f"Error drawing dashboard: {e}")
+        img = Image.new("RGBA", (WIDTH, HEIGHT), theme["bg_color"])
+        draw = ImageDraw.Draw(img)
+        font_err = get_font(FONT_BOLD, 34)
+        draw.text(
+            (WIDTH//2, HEIGHT//2),
+            "RENDER ERROR\nCheck Console Logs",
+            fill=theme["text_color"],
+            font=font_err,
+            anchor="mm",
+            align="center",
+        )
 
     return img
 
@@ -490,14 +690,14 @@ def main():
     if INKY_AVAILABLE:
         try:
             display = auto()
-            display.set_image(img.convert("RGB"))
+            display.set_image(quantize_for_inky(img))
             display.show()
             print("Display updated.")
         except Exception as e:
             print(f"Display error: {e}")
             raise   # let systemd record the failure
     else:
-        img.convert("RGB").save("dashboard-preview.jpg")
+        quantize_for_inky(img).save("dashboard-preview.jpg")
         print("Saved dashboard-preview.jpg")
 
 

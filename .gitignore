@@ -1,2 +1,16 @@
 # Secrets and credentials
 secrets.py
+
+# Python/runtime artifacts
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Build outputs
+build/
+dist/
+*.exe
+
+# Local generated previews
+dashboard-preview-local.*

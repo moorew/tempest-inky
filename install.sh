@@ -9,7 +9,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Determine the real user even when called with sudo
 APP_USER="${SUDO_USER:-$USER}"
-APP_HOME=$(eval echo "~$APP_USER")
+APP_HOME="$(getent passwd "$APP_USER" | cut -d: -f6)"
+if [ -z "$APP_HOME" ]; then
+    echo "ERROR: Could not determine home directory for $APP_USER."
+    exit 1
+fi
 
 echo "========================================"
 echo "  Tempest Inky Dashboard Setup          "
@@ -125,28 +129,34 @@ fi
     --quiet \
     --upgrade \
     --extra-index-url https://www.piwheels.org/simple \
-    "inky[rpi]" \
-    Pillow \
-    requests \
-    numpy
+    -r "$SCRIPT_DIR/requirements.txt"
 
 echo "  Packages ready."
 
 # ── Step 6: API credentials ───────────────────────────────────────────────────
 
 echo "[6/7] Configuring Tempest API credentials..."
-if [ ! -f "$SCRIPT_DIR/secrets.py" ]; then
+SECRETS_FILE="$APP_HOME/secrets.py"
+LEGACY_SECRETS_FILE="$SCRIPT_DIR/secrets.py"
+
+if [ ! -f "$SECRETS_FILE" ] && [ -f "$LEGACY_SECRETS_FILE" ]; then
+    cp -p "$LEGACY_SECRETS_FILE" "$SECRETS_FILE"
+    chmod 600 "$SECRETS_FILE"
+    echo "  Existing repo-local secrets.py copied to $SECRETS_FILE."
+fi
+
+if [ ! -f "$SECRETS_FILE" ]; then
     echo ""
     read -rp "  Enter your Tempest Station ID : " station_id
     read -rp "  Enter your Tempest API Token  : " api_token
-    cat > "$SCRIPT_DIR/secrets.py" <<EOF
+    cat > "$SECRETS_FILE" <<EOF
 STATION_ID = "$station_id"
 TOKEN = "$api_token"
 EOF
-    chmod 600 "$SCRIPT_DIR/secrets.py"
-    echo "  secrets.py created."
+    chmod 600 "$SECRETS_FILE"
+    echo "  secrets.py created at $SECRETS_FILE."
 else
-    echo "  secrets.py already exists — skipping."
+    echo "  $SECRETS_FILE already exists — skipping."
 fi
 
 # ── Step 7: systemd service + timer ──────────────────────────────────────────
