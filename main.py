@@ -62,8 +62,8 @@ STYLES = {
         "bg_color":    (255, 255, 255, 255),
         "text_color":  (0, 0, 0),
         "line_color":  (0, 0, 0),
-        "graph_type":  "vivid_bar",
-        "graph_width": 4,
+        "graph_type":  "clean_line",
+        "graph_width": 3,
         "is_desktop":  False,
     },
     "desktop": {
@@ -230,6 +230,16 @@ def draw_graph(draw, data_points, box, theme_config):
         for i, val in enumerate(data_points):
             pts.append((x1 + i*step, max(y1, min(y2, y2 - ((val - v_min) / v_range * h)))))
         draw.line(pts, fill=theme_config["text_color"], width=theme_config["graph_width"])
+    elif theme_config["graph_type"] == "clean_line":
+        pts = []
+        for i, val in enumerate(data_points):
+            px = x1 + i * step
+            py = max(y1 + 2, min(y2 - 2, y2 - ((val - v_min) / v_range * h)))
+            pts.append((int(px), int(py)))
+        fill_pts = [(x1, y2)] + pts + [(x2, y2)]
+        draw.polygon(fill_pts, fill=(220, 220, 220))
+        if len(pts) > 1:
+            draw.line(pts, fill=theme_config["text_color"], width=theme_config["graph_width"])
     else:
         draw_graph_supersampled(draw._image, data_points, box, theme_config, v_min, v_max, v_range)
 
@@ -348,7 +358,7 @@ def fetch_weather(retries=3):
             wind_gust_ms = obs.get("wind_gust") or 0
             pressure     = round(obs.get("sea_level_pressure") or 0, 1)
 
-            hourly_temps  = [x["air_temperature"] for x in hourly[:24] if x.get("air_temperature") is not None]
+            hourly_temps  = [x["air_temperature"] for x in hourly[:120] if x.get("air_temperature") is not None]
             hourly_precip = [x.get("precip_probability") or 0 for x in hourly[:24]]
 
             feels_like_raw = (
@@ -410,74 +420,56 @@ def create_dashboard(weather, theme_name="inky"):
         return img
 
     try:
-        # ── Fonts ──────────────────────────────────────────────────────────
-        # Two tiers: hero (readable at 6 feet) and detail (readable close-up)
-        font_temp = ImageFont.truetype(FONT_BOLD,  108)   # temperature — hero
-        font_feel = ImageFont.truetype(FONT_BOLD,   44)   # feels like  — secondary glance
-        font_summ = ImageFont.truetype(FONT_BOLD,   24)   # condition text
-        font_sv   = ImageFont.truetype(FONT_BOLD,   22)   # stat primary values
-        font_ss   = ImageFont.truetype(FONT_LIGHT,  17)   # stat secondary / labels
-        font_fcd  = ImageFont.truetype(FONT_BOLD,   20)   # forecast day name
-        font_fct  = ImageFont.truetype(FONT_BOLD,   19)   # forecast high/low
-        font_tiny = ImageFont.truetype(FONT_LIGHT,  15)   # update time, sunrise, precip %
+        font_temp = ImageFont.truetype(FONT_BOLD,  96)
+        font_feel = ImageFont.truetype(FONT_BOLD,  36)
+        font_summ = ImageFont.truetype(FONT_BOLD,  22)
+        font_sv   = ImageFont.truetype(FONT_BOLD,  26)
+        font_ss   = ImageFont.truetype(FONT_LIGHT, 21)
+        font_fcd  = ImageFont.truetype(FONT_BOLD,  20)
+        font_fct  = ImageFont.truetype(FONT_BOLD,  19)
+        font_tiny = ImageFont.truetype(FONT_LIGHT, 15)
 
         TEXT = theme["text_color"]
         LINE = theme["line_color"]
-        # Blue maps cleanly to the Inky Impression palette for rain indicators
         BLUE = (0, 80, 200) if not theme["is_desktop"] else (100, 160, 255)
 
         def temp_col(t):
-            """Palette-friendly temperature colours for the 7-colour Inky."""
             if theme["is_desktop"]:
                 return get_smooth_color(t)
-            if t < 5:  return (0, 0, 200)    # blue
-            if t < 22: return TEXT            # black  (yellow is low-contrast on white)
-            if t < 28: return (200, 80, 0)   # orange
-            return (200, 0, 0)               # red
+            return TEXT  # solid black on e-ink — no dithering
 
-        # ══════════════════════════════════════════════════════════════════
-        # ZONE 1  y: 0–176   Current conditions  — readable at 6 feet
-        # ══════════════════════════════════════════════════════════════════
+        # ══ ZONE 1  y: 0–170   Current conditions ══════════════════════════════
 
-        # Large condition icon (left-anchored)
-        main_icon = get_icon_image(weather["icon_name"], theme, size=(148, 148))
-        img.paste(main_icon, (8, 13), main_icon)
+        main_icon = get_icon_image(weather["icon_name"], theme, size=(120, 120))
+        img.paste(main_icon, (12, 14), main_icon)
 
-        # Temperature — the primary hero element
-        draw.text((380, 8), f"{weather['temp']}°",
-                  fill=temp_col(weather["temp"]), font=font_temp,
-                  anchor="mt", stroke_width=4)
+        draw.text((400, 6), f"{weather['temp']}°",
+                  fill=temp_col(weather["temp"]), font=font_temp, anchor="mt")
 
-        # Feels Like — secondary glance, large enough to read across the room
-        draw.text((380, 113), f"Feels Like {weather['feels_like']}°",
-                  fill=TEXT, font=font_feel, anchor="mt", stroke_width=2)
+        draw.text((400, 108), f"Feels Like {weather['feels_like']}°",
+                  fill=TEXT, font=font_feel, anchor="mt")
 
-        # Condition summary (detail; walk up to read)
-        draw.text((380, 157), weather["summary"],
-                  fill=TEXT, font=font_summ, anchor="mt", stroke_width=1)
+        draw.text((400, 146), weather["summary"],
+                  fill=LINE, font=font_summ, anchor="mt")
 
-        # Right column: update time + sunrise/sunset + UV (all detail-level)
-        draw.text((792,  6), time.strftime("Updated %H:%M"), fill=LINE, font=font_tiny, anchor="rt")
-        draw.text((792, 26), f"Rise  {weather['sunrise']}",  fill=TEXT, font=font_tiny, anchor="rt")
-        draw.text((792, 46), f"Set   {weather['sunset']}",   fill=TEXT, font=font_tiny, anchor="rt")
-        uv_icon = get_icon_image(weather["uv_icon"], theme, size=(26, 26))
-        img.paste(uv_icon, (764, 63), uv_icon)
-        draw.text((792, 79), f"UV {weather['uv']}",          fill=TEXT, font=font_tiny, anchor="rt")
+        draw.text((790,  8), time.strftime("Updated %H:%M"), fill=LINE, font=font_tiny, anchor="rt")
+        draw.text((790, 26), f"Rise  {weather['sunrise']}",   fill=TEXT, font=font_tiny, anchor="rt")
+        draw.text((790, 44), f"Set   {weather['sunset']}",    fill=TEXT, font=font_tiny, anchor="rt")
+        uv_icon = get_icon_image(weather["uv_icon"], theme, size=(20, 20))
+        img.paste(uv_icon, (766, 62), uv_icon)
+        draw.text((790, 73), f"UV {weather['uv']}",           fill=TEXT, font=font_tiny, anchor="rt")
 
-        draw.line([(8, 177), (792, 177)], fill=LINE, width=2)
+        draw.line([(8, 172), (792, 172)], fill=LINE, width=1)
 
-        # ══════════════════════════════════════════════════════════════════
-        # ZONE 2  y: 179–248   Stats — 4 columns, detail-level
-        # ══════════════════════════════════════════════════════════════════
+        # ══ ZONE 2  y: 174–264   Current details ═══════════════════════════════
 
-        COLS    = [10, 205, 400, 598]   # icon left-edge x for each column
-        ICON_Y  = 181                   # icon top
-        VAL_Y   = 198                   # primary text vertical centre (lm anchor)
-        SUB_Y   = 222                   # secondary text vertical centre (lm anchor)
-        ICO_SZ  = 34
-        TX_OFF  = 40                    # text x offset from icon left
+        COLS   = [12, 212, 412, 612]
+        ICON_Y = 180
+        VAL_Y  = 203
+        SUB_Y  = 228
+        ICO_SZ = 40
+        TX_OFF = 48
 
-        # Wind
         ico = get_icon_image(weather["wind_icon"], theme, size=(ICO_SZ, ICO_SZ))
         img.paste(ico, (COLS[0], ICON_Y), ico)
         draw.text((COLS[0]+TX_OFF, VAL_Y), f"{weather['wind_speed']} km/h {weather['wind_dir']}",
@@ -485,7 +477,6 @@ def create_dashboard(weather, theme_name="inky"):
         draw.text((COLS[0]+TX_OFF, SUB_Y), f"Gust {weather['wind_gust']} km/h",
                   fill=LINE, font=font_ss, anchor="lm")
 
-        # Rain
         ico = get_icon_image("rain", theme, size=(ICO_SZ, ICO_SZ))
         img.paste(ico, (COLS[1], ICON_Y), ico)
         draw.text((COLS[1]+TX_OFF, VAL_Y), f"{weather['rain_today']} mm today",
@@ -493,17 +484,14 @@ def create_dashboard(weather, theme_name="inky"):
         draw.text((COLS[1]+TX_OFF, SUB_Y), f"Yest {weather['rain_yesterday']} mm",
                   fill=LINE, font=font_ss, anchor="lm")
 
-        # Humidity + dew point on one row
         ico = get_icon_image("humidity", theme, size=(ICO_SZ, ICO_SZ))
         img.paste(ico, (COLS[2], ICON_Y), ico)
         draw.text((COLS[2]+TX_OFF, VAL_Y), f"{weather['humidity']}%  Dew {weather['dew_point']}°",
                   fill=TEXT, font=font_sv, anchor="lm")
-        # Secondary: lightning if detected, otherwise empty
         if weather.get("lightning_count", 0) > 0:
             draw.text((COLS[2]+TX_OFF, SUB_Y), f"Lightning: {weather['lightning_count']}",
                       fill=(200, 80, 0), font=font_ss, anchor="lm")
 
-        # Pressure + trend
         ico = get_icon_image("barometer", theme, size=(ICO_SZ, ICO_SZ))
         img.paste(ico, (COLS[3], ICON_Y), ico)
         draw.text((COLS[3]+TX_OFF, VAL_Y), f"{weather['pressure']} hPa",
@@ -511,50 +499,39 @@ def create_dashboard(weather, theme_name="inky"):
         draw.text((COLS[3]+TX_OFF, SUB_Y), weather.get("pressure_trend", "Steady"),
                   fill=LINE, font=font_ss, anchor="lm")
 
-        draw.line([(8, 250), (792, 250)], fill=LINE, width=2)
+        draw.line([(8, 266), (792, 266)], fill=LINE, width=1)
 
-        # ══════════════════════════════════════════════════════════════════
-        # ZONE 3  y: 252–346   24hr temperature trend
-        # Graph is now 72 px tall (vs 30 px before) — much easier to read
-        # ══════════════════════════════════════════════════════════════════
+        # ══ ZONE 3  y: 268–358   5-Day temperature trend ══════════════════════
 
         if weather.get("hourly_temps"):
             t_min = min(weather["hourly_temps"])
             t_max = max(weather["hourly_temps"])
-            draw.text(( 10, 254), "24hr Trend",
-                      fill=TEXT, font=font_ss, stroke_width=1)
-            draw.text((792, 254), f"L {int(round(t_min))}°   H {int(round(t_max))}°",
-                      fill=TEXT, font=font_ss, anchor="rs", stroke_width=1)
-            draw_graph(draw, weather["hourly_temps"], (10, 270, 792, 344), theme)
+            draw.text(( 12, 270), "5-Day Trend",
+                      fill=TEXT, font=font_ss)
+            draw.text((790, 270), f"L {int(round(t_min))}°   H {int(round(t_max))}°",
+                      fill=TEXT, font=font_ss, anchor="rs")
+            draw_graph(draw, weather["hourly_temps"], (12, 292, 790, 356), theme)
 
-        draw.line([(8, 347), (792, 347)], fill=LINE, width=2)
+        draw.line([(8, 360), (792, 360)], fill=LINE, width=1)
 
-        # ══════════════════════════════════════════════════════════════════
-        # ZONE 4  y: 349–480   5-day forecast
-        # Icon + high/low + precipitation probability bar
-        # ══════════════════════════════════════════════════════════════════
+        # ══ ZONE 4  y: 362–478   5-day forecast ════════════════════════════════
 
         for i, day in enumerate(weather["forecast"]):
-            cx = 80 + i * 160    # column centre x
+            cx = 80 + i * 160
 
-            draw.text((cx, 351), day["day"].upper(),
-                      fill=TEXT, font=font_fcd, anchor="mt", stroke_width=1)
+            draw.text((cx, 363), day["day"].upper(),
+                      fill=TEXT, font=font_fcd, anchor="mt")
 
-            fc_icon = get_icon_image(day["icon_name"], theme, size=(68, 68))
-            img.paste(fc_icon, (cx - 34, 374), fc_icon)
+            fc_icon = get_icon_image(day["icon_name"], theme, size=(62, 62))
+            img.paste(fc_icon, (cx - 31, 383), fc_icon)
 
-            draw.text((cx, 445), f"{day['high']}° / {day['low']}°",
-                      fill=TEXT, font=font_fct, anchor="mt", stroke_width=1)
+            draw.text((cx, 448), f"{day['high']}° / {day['low']}°",
+                      fill=TEXT, font=font_fct, anchor="mt")
 
             prob = day.get("precip_prob", 0)
             if prob >= 10:
-                draw.text((cx, 464), f"{prob}%",
+                draw.text((cx, 465), f"{prob}%",
                           fill=BLUE, font=font_tiny, anchor="mt")
-                # Proportional bar: 120 px max, centred under the text
-                bar_w = int(120 * prob / 100)
-                bx    = cx - 60
-                draw.rectangle([(bx,       475), (bx + 120,   478)], fill=LINE)
-                draw.rectangle([(bx,       475), (bx + bar_w, 478)], fill=BLUE)
 
     except Exception as e:
         print(f"Error drawing dashboard: {e}")
