@@ -2,6 +2,7 @@ import sys
 import time
 import os
 import json
+import gc
 import socket
 import requests
 import importlib.util
@@ -368,7 +369,7 @@ def fetch_weather(retries=3):
                 or 0
             )
 
-            return {
+            result = {
                 "temp":           round(obs.get("air_temperature") or 0, 1),
                 "feels_like":     int(round(feels_like_raw)),
                 "wind_speed":     round(wind_ms * 3.6, 1),
@@ -392,6 +393,10 @@ def fetch_weather(retries=3):
                 "sunset":         sunset_str,
                 "lightning_count":obs.get("lightning_strike_count") or 0,
             }
+            # Free the raw API payloads — they can be several MB of nested dicts
+            del r_obs, r_for, obs, current, daily, hourly
+            gc.collect()
+            return result
         except Exception as e:
             last_err = e
             print(f"Fetch attempt {attempt+1}/{retries} failed: {e}")
@@ -404,7 +409,7 @@ def fetch_weather(retries=3):
 
 def create_dashboard(weather, theme_name="inky"):
     theme = STYLES.get(theme_name, STYLES["inky"])
-    img   = Image.new("RGBA", (WIDTH, HEIGHT), theme["bg_color"])
+    img   = Image.new("RGB", (WIDTH, HEIGHT), theme["bg_color"][:3])
     draw  = ImageDraw.Draw(img)
     draw._image = img  # needed by draw_graph_supersampled
 
@@ -440,8 +445,12 @@ def create_dashboard(weather, theme_name="inky"):
 
         # ══ ZONE 1  y: 0–170   Current conditions ══════════════════════════════
 
-        main_icon = get_icon_image(weather["icon_name"], theme, size=(120, 120))
-        img.paste(main_icon, (12, 14), main_icon)
+        def paste_icon(name, pos, size):
+            ico = get_icon_image(name, theme, size=size)
+            img.paste(ico, pos, ico)
+            ico.close()
+
+        paste_icon(weather["icon_name"], (12, 14), (120, 120))
 
         draw.text((400, 6), f"{weather['temp']}°",
                   fill=temp_col(weather["temp"]), font=font_temp, anchor="mt")
@@ -455,8 +464,7 @@ def create_dashboard(weather, theme_name="inky"):
         draw.text((790,  8), time.strftime("Updated %H:%M"), fill=LINE, font=font_tiny, anchor="rt")
         draw.text((790, 26), f"Rise  {weather['sunrise']}",   fill=TEXT, font=font_tiny, anchor="rt")
         draw.text((790, 44), f"Set   {weather['sunset']}",    fill=TEXT, font=font_tiny, anchor="rt")
-        uv_icon = get_icon_image(weather["uv_icon"], theme, size=(20, 20))
-        img.paste(uv_icon, (766, 62), uv_icon)
+        paste_icon(weather["uv_icon"], (766, 62), (20, 20))
         draw.text((790, 73), f"UV {weather['uv']}",           fill=TEXT, font=font_tiny, anchor="rt")
 
         draw.line([(8, 172), (792, 172)], fill=LINE, width=1)
@@ -470,30 +478,26 @@ def create_dashboard(weather, theme_name="inky"):
         ICO_SZ = 40
         TX_OFF = 48
 
-        ico = get_icon_image(weather["wind_icon"], theme, size=(ICO_SZ, ICO_SZ))
-        img.paste(ico, (COLS[0], ICON_Y), ico)
+        paste_icon(weather["wind_icon"], (COLS[0], ICON_Y), (ICO_SZ, ICO_SZ))
         draw.text((COLS[0]+TX_OFF, VAL_Y), f"{weather['wind_speed']} km/h {weather['wind_dir']}",
                   fill=TEXT, font=font_sv, anchor="lm")
         draw.text((COLS[0]+TX_OFF, SUB_Y), f"Gust {weather['wind_gust']} km/h",
                   fill=LINE, font=font_ss, anchor="lm")
 
-        ico = get_icon_image("rain", theme, size=(ICO_SZ, ICO_SZ))
-        img.paste(ico, (COLS[1], ICON_Y), ico)
+        paste_icon("rain", (COLS[1], ICON_Y), (ICO_SZ, ICO_SZ))
         draw.text((COLS[1]+TX_OFF, VAL_Y), f"{weather['rain_today']} mm today",
                   fill=TEXT, font=font_sv, anchor="lm")
         draw.text((COLS[1]+TX_OFF, SUB_Y), f"Yest {weather['rain_yesterday']} mm",
                   fill=LINE, font=font_ss, anchor="lm")
 
-        ico = get_icon_image("humidity", theme, size=(ICO_SZ, ICO_SZ))
-        img.paste(ico, (COLS[2], ICON_Y), ico)
+        paste_icon("humidity", (COLS[2], ICON_Y), (ICO_SZ, ICO_SZ))
         draw.text((COLS[2]+TX_OFF, VAL_Y), f"{weather['humidity']}%  Dew {weather['dew_point']}°",
                   fill=TEXT, font=font_sv, anchor="lm")
         if weather.get("lightning_count", 0) > 0:
             draw.text((COLS[2]+TX_OFF, SUB_Y), f"Lightning: {weather['lightning_count']}",
                       fill=(200, 80, 0), font=font_ss, anchor="lm")
 
-        ico = get_icon_image("barometer", theme, size=(ICO_SZ, ICO_SZ))
-        img.paste(ico, (COLS[3], ICON_Y), ico)
+        paste_icon("barometer", (COLS[3], ICON_Y), (ICO_SZ, ICO_SZ))
         draw.text((COLS[3]+TX_OFF, VAL_Y), f"{weather['pressure']} hPa",
                   fill=TEXT, font=font_sv, anchor="lm")
         draw.text((COLS[3]+TX_OFF, SUB_Y), weather.get("pressure_trend", "Steady"),
@@ -522,8 +526,7 @@ def create_dashboard(weather, theme_name="inky"):
             draw.text((cx, 363), day["day"].upper(),
                       fill=TEXT, font=font_fcd, anchor="mt")
 
-            fc_icon = get_icon_image(day["icon_name"], theme, size=(62, 62))
-            img.paste(fc_icon, (cx - 31, 383), fc_icon)
+            paste_icon(day["icon_name"], (cx - 31, 383), (62, 62))
 
             draw.text((cx, 448), f"{day['high']}° / {day['low']}°",
                       fill=TEXT, font=font_fct, anchor="mt")
@@ -548,18 +551,22 @@ def main():
     print("Fetching weather...")
     weather = fetch_weather()
     img     = create_dashboard(weather, theme_name="inky")
+    gc.collect()  # free API data and icon buffers before the display write
 
     if INKY_AVAILABLE:
         try:
             display = auto()
-            display.set_image(img.convert("RGB"))
+            display.set_image(img)  # already RGB
+            img.close()
+            gc.collect()
             display.show()
             print("Display updated.")
         except Exception as e:
             print(f"Display error: {e}")
             raise   # let systemd record the failure
     else:
-        img.convert("RGB").save("dashboard-preview.jpg")
+        img.save("dashboard-preview.jpg")
+        img.close()
         print("Saved dashboard-preview.jpg")
 
 

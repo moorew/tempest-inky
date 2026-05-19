@@ -171,6 +171,19 @@ StandardOutput=journal
 StandardError=journal
 TimeoutStartSec=300
 SyslogIdentifier=tempest-inky
+
+# Run at lower priority so SSH and system processes always stay responsive
+Nice=10
+IOSchedulingClass=idle
+
+# Hard memory cap: if the process exceeds this it is killed cleanly
+# rather than the kernel OOM-killing sshd and other critical services
+MemoryMax=350M
+MemorySwapMax=0
+
+# Make this process the first candidate for OOM killing if the system
+# ever gets into trouble, protecting the rest of the OS
+OOMScoreAdjust=500
 EOF
 
 sudo tee /etc/systemd/system/tempest-inky.timer > /dev/null <<EOF
