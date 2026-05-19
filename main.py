@@ -2,7 +2,6 @@ import sys
 import time
 import os
 import json
-import gc
 import socket
 import requests
 import importlib.util
@@ -63,8 +62,8 @@ STYLES = {
         "bg_color":    (255, 255, 255, 255),
         "text_color":  (0, 0, 0),
         "line_color":  (0, 0, 0),
-        "graph_type":  "clean_line",
-        "graph_width": 3,
+        "graph_type":  "vivid_bar",
+        "graph_width": 4,
         "is_desktop":  False,
     },
     "desktop": {
@@ -369,7 +368,7 @@ def fetch_weather(retries=3):
                 or 0
             )
 
-            result = {
+            return {
                 "temp":           round(obs.get("air_temperature") or 0, 1),
                 "feels_like":     int(round(feels_like_raw)),
                 "wind_speed":     round(wind_ms * 3.6, 1),
@@ -393,10 +392,6 @@ def fetch_weather(retries=3):
                 "sunset":         sunset_str,
                 "lightning_count":obs.get("lightning_strike_count") or 0,
             }
-            # Free the raw API payloads — they can be several MB of nested dicts
-            del r_obs, r_for, obs, current, daily, hourly
-            gc.collect()
-            return result
         except Exception as e:
             last_err = e
             print(f"Fetch attempt {attempt+1}/{retries} failed: {e}")
@@ -409,132 +404,72 @@ def fetch_weather(retries=3):
 
 def create_dashboard(weather, theme_name="inky"):
     theme = STYLES.get(theme_name, STYLES["inky"])
-    img   = Image.new("RGB", (WIDTH, HEIGHT), theme["bg_color"][:3])
-    draw  = ImageDraw.Draw(img)
-    draw._image = img  # needed by draw_graph_supersampled
+    img = Image.new("RGBA", (WIDTH, HEIGHT), theme["bg_color"])
+    draw = ImageDraw.Draw(img)
+    draw._image = img
 
     if not weather:
-        print("Drawing error screen...")
+        print("Drawing Error Screen...")
         try:
-            fe = ImageFont.truetype(FONT_BOLD, 36)
-            draw.text((WIDTH//2, HEIGHT//2),
-                      "DATA FETCH ERROR\njournalctl -u tempest-inky",
-                      fill=theme["text_color"], font=fe, anchor="mm", align="center")
+            font_err = ImageFont.truetype(FONT_BOLD, 40)
+            draw.text((WIDTH//2, HEIGHT//2), "DATA FETCH ERROR\nCheck Console Logs",
+                      fill=theme["text_color"], font=font_err, anchor="mm", align="center")
         except Exception:
             pass
         return img
 
     try:
-        font_temp = ImageFont.truetype(FONT_BOLD,  96)
-        font_feel = ImageFont.truetype(FONT_BOLD,  36)
-        font_summ = ImageFont.truetype(FONT_BOLD,  22)
-        font_sv   = ImageFont.truetype(FONT_BOLD,  26)
-        font_ss   = ImageFont.truetype(FONT_LIGHT, 21)
-        font_fcd  = ImageFont.truetype(FONT_BOLD,  20)
-        font_fct  = ImageFont.truetype(FONT_BOLD,  19)
-        font_tiny = ImageFont.truetype(FONT_LIGHT, 15)
+        font_huge      = ImageFont.truetype(FONT_BOLD,  130)
+        font_condition = ImageFont.truetype(FONT_BOLD,   35)
+        font_feels     = ImageFont.truetype(FONT_BOLD,   25)
+        font_forecast  = ImageFont.truetype(FONT_BOLD,   22)
+        font_val       = ImageFont.truetype(FONT_BOLD,   25)
+        font_label     = ImageFont.truetype(FONT_BOLD,   20)
+        font_tiny      = ImageFont.truetype(FONT_LIGHT,  16)
+        TEXT, LINE = theme["text_color"], theme["line_color"]
 
-        TEXT = theme["text_color"]
-        LINE = theme["line_color"]
-        BLUE = (0, 80, 200) if not theme["is_desktop"] else (100, 160, 255)
+        draw.text((780, 5), time.strftime("Updated: %H:%M"), fill=LINE, font=font_tiny, anchor="rt")
 
-        def temp_col(t):
-            if theme["is_desktop"]:
-                return get_smooth_color(t)
-            return TEXT  # solid black on e-ink — no dithering
+        main_icon = get_icon_image(weather["icon_name"], theme, size=(200, 200))
+        img.paste(main_icon, (15, 10), main_icon)
 
-        # ══ ZONE 1  y: 0–170   Current conditions ══════════════════════════════
+        temp_col = get_smooth_color(weather["temp"]) if theme["is_desktop"] else TEXT
+        draw.text((380, 50),  f"{weather['temp']}°",             fill=temp_col, font=font_huge,      anchor="mt", stroke_width=5)
+        draw.text((380, 180), f"Feels Like {weather['feels_like']}°", fill=TEXT, font=font_feels, anchor="mm", stroke_width=1)
+        draw.text((380, 215), weather["summary"],                 fill=TEXT, font=font_condition, anchor="mm", stroke_width=1)
 
-        def paste_icon(name, pos, size):
-            ico = get_icon_image(name, theme, size=size)
-            img.paste(ico, pos, ico)
-            ico.close()
-
-        paste_icon(weather["icon_name"], (12, 14), (120, 120))
-
-        draw.text((400, 6), f"{weather['temp']}°",
-                  fill=temp_col(weather["temp"]), font=font_temp, anchor="mt")
-
-        draw.text((400, 108), f"Feels Like {weather['feels_like']}°",
-                  fill=TEXT, font=font_feel, anchor="mt")
-
-        draw.text((400, 146), weather["summary"],
-                  fill=LINE, font=font_summ, anchor="mt")
-
-        draw.text((790,  8), time.strftime("Updated %H:%M"), fill=LINE, font=font_tiny, anchor="rt")
-        draw.text((790, 26), f"Rise  {weather['sunrise']}",   fill=TEXT, font=font_tiny, anchor="rt")
-        draw.text((790, 44), f"Set   {weather['sunset']}",    fill=TEXT, font=font_tiny, anchor="rt")
-        paste_icon(weather["uv_icon"], (766, 62), (20, 20))
-        draw.text((790, 73), f"UV {weather['uv']}",           fill=TEXT, font=font_tiny, anchor="rt")
-
-        draw.line([(8, 172), (792, 172)], fill=LINE, width=1)
-
-        # ══ ZONE 2  y: 174–264   Current details ═══════════════════════════════
-
-        COLS   = [12, 212, 412, 612]
-        ICON_Y = 180
-        VAL_Y  = 203
-        SUB_Y  = 228
-        ICO_SZ = 40
-        TX_OFF = 48
-
-        paste_icon(weather["wind_icon"], (COLS[0], ICON_Y), (ICO_SZ, ICO_SZ))
-        draw.text((COLS[0]+TX_OFF, VAL_Y), f"{weather['wind_speed']} km/h {weather['wind_dir']}",
-                  fill=TEXT, font=font_sv, anchor="lm")
-        draw.text((COLS[0]+TX_OFF, SUB_Y), f"Gust {weather['wind_gust']} km/h",
-                  fill=LINE, font=font_ss, anchor="lm")
-
-        paste_icon("rain", (COLS[1], ICON_Y), (ICO_SZ, ICO_SZ))
-        draw.text((COLS[1]+TX_OFF, VAL_Y), f"{weather['rain_today']} mm today",
-                  fill=TEXT, font=font_sv, anchor="lm")
-        draw.text((COLS[1]+TX_OFF, SUB_Y), f"Yest {weather['rain_yesterday']} mm",
-                  fill=LINE, font=font_ss, anchor="lm")
-
-        paste_icon("humidity", (COLS[2], ICON_Y), (ICO_SZ, ICO_SZ))
-        draw.text((COLS[2]+TX_OFF, VAL_Y), f"{weather['humidity']}%  Dew {weather['dew_point']}°",
-                  fill=TEXT, font=font_sv, anchor="lm")
-        if weather.get("lightning_count", 0) > 0:
-            draw.text((COLS[2]+TX_OFF, SUB_Y), f"Lightning: {weather['lightning_count']}",
-                      fill=(200, 80, 0), font=font_ss, anchor="lm")
-
-        paste_icon("barometer", (COLS[3], ICON_Y), (ICO_SZ, ICO_SZ))
-        draw.text((COLS[3]+TX_OFF, VAL_Y), f"{weather['pressure']} hPa",
-                  fill=TEXT, font=font_sv, anchor="lm")
-        draw.text((COLS[3]+TX_OFF, SUB_Y), weather.get("pressure_trend", "Steady"),
-                  fill=LINE, font=font_ss, anchor="lm")
-
-        draw.line([(8, 266), (792, 266)], fill=LINE, width=1)
-
-        # ══ ZONE 3  y: 268–358   5-Day temperature trend ══════════════════════
+        draw.line([(580, 25), (580, 215)], fill=LINE, width=2)
+        stats = [
+            (weather["wind_icon"], f"{weather['wind_speed']} km/h {weather['wind_dir']}"),
+            ("rain",               f"{weather['rain_today']} mm"),
+            ("humidity",           f"{weather['humidity']}%"),
+            ("barometer",          f"{weather['pressure']} hPa"),
+            (weather["uv_icon"],   f"UV {weather['uv']}"),
+        ]
+        for i, (icon, val) in enumerate(stats):
+            y = 20 + (i * 40)
+            img_icon = get_icon_image(icon, theme, size=(40, 40))
+            img.paste(img_icon, (600, int(y)), img_icon)
+            draw.text((780, y + 20), val, fill=TEXT, font=font_val, anchor="rm", stroke_width=1)
 
         if weather.get("hourly_temps"):
             t_min = min(weather["hourly_temps"])
             t_max = max(weather["hourly_temps"])
-            draw.text(( 12, 270), "5-Day Trend",
-                      fill=TEXT, font=font_ss)
-            draw.text((790, 270), f"L {int(round(t_min))}°   H {int(round(t_max))}°",
-                      fill=TEXT, font=font_ss, anchor="rs")
-            draw_graph(draw, weather["hourly_temps"], (12, 292, 790, 356), theme)
+            draw.text((40, 250), "24hr Trend", fill=TEXT, font=font_label, stroke_width=1)
+            if not theme["is_desktop"]:
+                t_str = f"L:{int(round(t_min))}°  H:{int(round(t_max))}°"
+            else:
+                t_str = f"L:{t_min}°  H:{t_max}°"
+            draw.text((760, 250), t_str, fill=TEXT, font=font_label, anchor="rs", stroke_width=1)
+            draw_graph(draw, weather["hourly_temps"], (40, 280, 760, 310), theme)
 
-        draw.line([(8, 360), (792, 360)], fill=LINE, width=1)
-
-        # ══ ZONE 4  y: 362–478   5-day forecast ════════════════════════════════
-
+        draw.line([(40, 315), (760, 315)], fill=LINE, width=3)
         for i, day in enumerate(weather["forecast"]):
-            cx = 80 + i * 160
-
-            draw.text((cx, 363), day["day"].upper(),
-                      fill=TEXT, font=font_fcd, anchor="mt")
-
-            paste_icon(day["icon_name"], (cx - 31, 383), (62, 62))
-
-            draw.text((cx, 448), f"{day['high']}° / {day['low']}°",
-                      fill=TEXT, font=font_fct, anchor="mt")
-
-            prob = day.get("precip_prob", 0)
-            if prob >= 10:
-                draw.text((cx, 465), f"{prob}%",
-                          fill=BLUE, font=font_tiny, anchor="mt")
+            x = 50 + (i * 150)
+            draw.text((x + 40, 335), day["day"],                        fill=TEXT, font=font_forecast, anchor="mm", stroke_width=1)
+            fc_icon = get_icon_image(day["icon_name"], theme, size=(100, 100))
+            img.paste(fc_icon, (int(x - 10), 345), fc_icon)
+            draw.text((x + 40, 455), f"{day['high']}° / {day['low']}°", fill=TEXT, font=font_forecast, anchor="mm", stroke_width=1)
 
     except Exception as e:
         print(f"Error drawing dashboard: {e}")
@@ -551,22 +486,18 @@ def main():
     print("Fetching weather...")
     weather = fetch_weather()
     img     = create_dashboard(weather, theme_name="inky")
-    gc.collect()  # free API data and icon buffers before the display write
 
     if INKY_AVAILABLE:
         try:
             display = auto()
-            display.set_image(img)  # already RGB
-            img.close()
-            gc.collect()
+            display.set_image(img.convert("RGB"))
             display.show()
             print("Display updated.")
         except Exception as e:
             print(f"Display error: {e}")
             raise   # let systemd record the failure
     else:
-        img.save("dashboard-preview.jpg")
-        img.close()
+        img.convert("RGB").save("dashboard-preview.jpg")
         print("Saved dashboard-preview.jpg")
 
 
