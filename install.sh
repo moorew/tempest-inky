@@ -196,13 +196,18 @@ MemorySwapMax=0
 OOMScoreAdjust=500
 EOF
 
+# The timer ticks every 5 minutes; main.py decides whether a tick is due.
+# Cadence is adaptive — 30 min overnight, 15 min normally, 10 min when rain
+# is likely in the next hour — and the service runs as the app user, which
+# cannot rewrite a unit file in /etc. A tick that is not due exits in under
+# a second without touching the network or the panel.
 sudo tee /etc/systemd/system/tempest-inky.timer > /dev/null <<EOF
 [Unit]
-Description=Tempest Inky refresh — every 15 minutes
+Description=Tempest Inky refresh — adaptive, 10-30 minutes
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=15min
+OnUnitActiveSec=5min
 AccuracySec=1min
 
 [Install]
@@ -230,14 +235,15 @@ echo ""
 echo "========================================"
 echo "  Setup Complete!"
 echo ""
-echo "  The display will update 2 minutes after reboot,"
-echo "  then every 15 minutes automatically."
+echo "  The display will update 2 minutes after reboot, then on an"
+echo "  adaptive schedule: every 15 minutes normally, 10 when rain is"
+echo "  likely within the hour, and 30 overnight (22:00-06:00)."
 echo ""
 echo "  Useful commands:"
 echo "    Check status : systemctl status tempest-inky.timer"
 echo "    View logs    : journalctl -u tempest-inky.service -n 50"
 echo "    Run now      : sudo systemctl start tempest-inky.service"
-echo "    Force refresh: sudo -u $APP_USER $SCRIPT_DIR/venv/bin/python3 $SCRIPT_DIR/main.py"
+echo "    Force refresh: sudo -u $APP_USER $SCRIPT_DIR/venv/bin/python3 $SCRIPT_DIR/main.py --force"
 echo ""
 echo "  IMPORTANT: Reboot now to activate SPI/I2C and group changes."
 echo "  Command: sudo reboot"

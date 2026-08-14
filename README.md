@@ -1,8 +1,26 @@
 # Tempest Inky
 
-A Python application for the Raspberry Pi that displays a clean, readable weather dashboard on a Pimoroni Inky e-ink display, pulling live data directly from a WeatherFlow Tempest weather station.
+A Python application for the Raspberry Pi that displays a weather dashboard on a Pimoroni Inky e-ink display, pulling live data directly from a WeatherFlow Tempest weather station.
 
-![Dashboard preview](dashboard-preview.jpg)
+The layout is built for a panel on a wall: type is sized by viewing distance, so the temperature and the day's headline read from across a room while the standing metrics read at walk-up. Colour is categorical, never decorative — hue carries condition, height carries quantity.
+
+![Dashboard preview](dashboard-preview.png)
+
+*Illustrative render. The panel shows your own station's data.*
+
+---
+
+## What's on the display
+
+Four full-width regions with fixed geometry — nothing moves between refreshes, which is what keeps an e-ink panel from ghosting and means the number you want is always where you last found it.
+
+| Region | Contents |
+|--------|----------|
+| **Concern band** | The single highest-priority thing worth knowing — lightning, rain starting, gusts, frost, or station trouble — filled in that concern's colour. Reads `NOTHING TO REPORT` when all is quiet, and keeps its height either way. |
+| **Spine** | Current temperature, condition and feels-like, today's low → high, and how old the station reading is. |
+| **Next 12 hours** | Precipitation probability per hour, on a fixed 0–100 % scale so an empty chart reads as *dry* rather than broken. Blue bars for snow, green for rain. |
+| **Five metrics** | Dew point, rain today, wind, pressure and daylight — always these five, always in this order. A slot fills with its own colour when it needs attention; a metric with no data shows a dash rather than disappearing. |
+| **Ten days** | Daily highs as bars: height is temperature, fill is condition, with a 0 °C reference line when freezing falls inside the range. |
 
 ---
 
@@ -90,7 +108,7 @@ The installer will:
 - Apply the Bookworm SPI chip-select overlay fix
 - Create a self-contained Python virtual environment
 - Prompt you for your Station ID and API token, saved as `~/secrets.py`
-- Install a **systemd timer** that refreshes the display every 15 minutes
+- Install a **systemd timer** that refreshes the display on an adaptive schedule
 
 ### 5. Reboot
 
@@ -98,7 +116,7 @@ The installer will:
 sudo reboot
 ```
 
-The display will update automatically ~2 minutes after boot, then every 15 minutes.
+The display will update automatically ~2 minutes after boot, then every 15 minutes — more often when rain is likely within the hour, less often overnight.
 
 ---
 
@@ -106,7 +124,8 @@ The display will update automatically ~2 minutes after boot, then every 15 minut
 
 | Feature | Detail |
 |---------|--------|
-| **Refresh schedule** | systemd timer: 2 min after boot, then every 15 min |
+| **Refresh schedule** | Adaptive: every 15 min normally, 10 min when rain is likely in the next hour, 30 min overnight (22:00–06:00). The timer ticks every 5 min and `main.py` decides whether a tick is due. |
+| **Stale data** | If a fetch fails, the last good reading is redrawn with a `STALE` marker instead of wiping the panel |
 | **Virtual environment** | Self-contained; immune to system Python upgrades |
 | **Network resilience** | Waits up to 2 minutes for WiFi before fetching |
 | **API retry** | Up to 3 attempts with exponential backoff on failure |
@@ -160,7 +179,7 @@ bash install.sh
 
 ### Display shows "DATA FETCH ERROR"
 
-Your API credentials may be wrong, or the Pi has no internet. Check:
+This appears only when a fetch fails **and** there is no cached reading to fall back on — normally a failed fetch redraws the last good data with a `STALE` marker instead. Your API credentials may be wrong, or the Pi has no internet. Check:
 ```bash
 # Test connectivity
 curl -s "https://swd.weatherflow.com/swd/rest/observations/station/YOUR_ID?token=YOUR_TOKEN" | python3 -m json.tool | head -20
@@ -191,8 +210,10 @@ The most common cause is SD card corruption from power loss, or sectors wearing 
 
 ```bash
 cd ~/tempest-inky
-venv/bin/python3 main.py
+venv/bin/python3 main.py --force
 ```
+
+`--force` renders immediately, ignoring the adaptive schedule. Without it, a run that is not yet due exits straight away without fetching or repainting.
 
 ---
 
@@ -206,7 +227,7 @@ git pull
 bash install.sh
 ```
 
-No reboot is required for code-only updates. The timer picks up the new `main.py` on its next 15-minute tick. If the systemd unit files changed (e.g. after upgrading from the old cron-based setup), reboot once after the first run of the new installer.
+No reboot is required for code-only updates. The timer picks up the new `main.py` on its next tick. If the systemd unit files changed (e.g. after upgrading from the old cron-based setup), reboot once after the first run of the new installer.
 
 To check that the update took effect:
 
