@@ -2,7 +2,8 @@ import os
 import threading
 
 import customtkinter as ctk
-from main import BASE_DIR, HEIGHT, WIDTH, create_dashboard, fetch_weather
+
+from main import BASE_DIR, HEIGHT, WIDTH, create_dashboard, fetch_all
 
 REFRESH_RATE = 60
 
@@ -42,7 +43,7 @@ class TempestDesktop(ctk.CTk):
 
     def fetch_and_render_weather(self):
         try:
-            weather = fetch_weather()
+            weather = fetch_all()
             pil_image = create_dashboard(weather, theme_name="desktop")
         except Exception as e:
             print(f"Refresh failed: {e}")

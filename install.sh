@@ -152,6 +152,22 @@ if [ ! -f "$SECRETS_FILE" ]; then
     cat > "$SECRETS_FILE" <<EOF
 STATION_ID = "$station_id"
 TOKEN = "$api_token"
+
+# ── Government weather alerts (optional) ─────────────────────────────────────
+# Left alone, the panel reads your station's own coordinates and timezone
+# from the Tempest API and picks the right national feed by itself.
+#
+# ALERT_REGION  "auto" (default), "ca", "us", "uk", or "none" to switch the
+#               feed off entirely.
+# LATITUDE /    Override the station's coordinates, e.g. if the panel is
+# LONGITUDE     somewhere other than the station.
+# ALERT_AREA    UK only — the Met Office region feed to read: "uk" for the
+#               national one, or a region code such as "wl" or "se".
+#
+# ALERT_REGION = "auto"
+# LATITUDE = 43.6532
+# LONGITUDE = -79.3832
+# ALERT_AREA = "uk"
 EOF
     chmod 600 "$SECRETS_FILE"
     echo "  secrets.py created at $SECRETS_FILE."

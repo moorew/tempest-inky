@@ -2,7 +2,9 @@
 
 A Python application for the Raspberry Pi that displays a weather dashboard on a Pimoroni Inky e-ink display, pulling live data directly from a WeatherFlow Tempest weather station.
 
-The layout is built for a panel on a wall: type is sized by viewing distance, so the temperature and the day's headline read from across a room while the standing metrics read at walk-up. Colour is categorical, never decorative — hue carries condition, height carries quantity.
+The layout is built to be read from a sofa, about 4.5 m away, in a dim room. Type is sized by viewing distance — comfortable reading needs a cap height of roughly distance ÷ 200 — and at that distance only one text element can ever be legible. So the panel carries exactly two things across the room: a number and a shape. Everything else is sized for walk-up.
+
+Colour is categorical, never decorative. The hero field carries official alert severity and nothing else; the small fills carry condition and nothing else.
 
 ![Dashboard preview](dashboard-preview.png)
 
@@ -16,11 +18,128 @@ Four full-width regions with fixed geometry — nothing moves between refreshes,
 
 | Region | Contents |
 |--------|----------|
-| **Concern band** | The single highest-priority thing worth knowing — lightning, rain starting, gusts, frost, or station trouble — filled in that concern's colour. Reads `NOTHING TO REPORT` when all is quiet, and keeps its height either way. |
-| **Spine** | Current temperature, condition and feels-like, today's low → high, and how old the station reading is. |
-| **Next 12 hours** | Precipitation probability per hour, on a fixed 0–100 % scale so an empty chart reads as *dry* rather than broken. Blue bars for snow, green for rain. |
-| **Five metrics** | Dew point, rain today, wind, pressure and daylight — always these five, always in this order. A slot fills with its own colour when it needs attention; a metric with no data shows a dash rather than disappearing. |
-| **Ten days** | Daily highs as bars: height is temperature, fill is condition, with a 0 °C reference line when freezing falls inside the range. |
+| **Hero** (300 px) | The condition as a 168 px glyph, the temperature at 228 px in whole degrees, and today's high and low. Fills with the alert colour when a government warning is active — a field of ink has no legibility threshold at all, so it registers from anywhere in the room. |
+| **Headline band** (80 px) | The single highest-priority thing worth knowing — an official alert, lightning, rain starting, gusts, frost, or station trouble — with the figure that qualifies it. Reads `ALL CLEAR TODAY` when all is quiet, and keeps its height either way. The exact temperature lives here, since the hero rounds. |
+| **Metrics line** (44 px) | Dew point, rain today, wind, pressure and daylight — always these five, always in this order, identified by glyph alone. A metric with no data shows a dash rather than disappearing. |
+| **Ten days** (52 px) | Each day's high, with an 8 px bar of condition colour beneath it. Cloud spends no ink — it draws white with a black keyline — so a dull week is nearly monochrome and colour across the room always means something changed. |
+
+---
+
+## Weather alerts
+
+The panel can carry official government warnings. The Tempest API does not have them — alerting is a TempestOne feature, not part of the public API — so this is one extra request to a national weather service. It is entirely optional and off unless a feed is available for your location.
+
+When an alert is active the whole 800×300 hero fills with its severity colour, and the headline band shows the event name and when it expires.
+
+| Level | Colour | Meaning |
+|-------|--------|---------|
+| Advisory | Yellow | Be aware |
+| Watch | Orange | Be prepared |
+| Warning | Red | Take action |
+
+All three services speak CAP, so severity maps the same way everywhere: Minor → advisory, Moderate → watch, Severe/Extreme → warning.
+
+### Setting it up
+
+**Most people need to do nothing.** The panel reads your station's coordinates and timezone from the Tempest API and picks the right national feed by itself. Check what it resolved to:
+
+```bash
+cd ~/tempest-inky
+venv/bin/python3 main.py --check-alerts
+```
+
+```
+  Coordinates : 43.6532, -79.3832
+  Timezone    : America/Toronto
+  Region      : ca (auto-detected)
+
+No alert active for this location right now.
+```
+
+That is a working setup — `Region: ca` means the feed is wired up and there is simply nothing to warn about. If it prints `Region: none`, or the wrong country, follow the steps for your region below.
+
+All settings go in `~/secrets.py`, alongside your station ID and token. Restart nothing — the next refresh picks them up.
+
+#### 🇨🇦 Canada — Environment Canada
+
+Source: the MSC GeoMet weather-alerts collection. No key, no account, no rate limit to worry about. Alerts are matched to your station's exact coordinates, and Environment Canada's own advisory / watch / warning levels map straight onto the three colours.
+
+```python
+ALERT_REGION = "ca"
+```
+
+Only needed if auto-detection failed — which happens if your station is close enough to the border that coordinates alone are ambiguous. See *Near the border* below.
+
+#### 🇺🇸 United States — National Weather Service
+
+Source: `api.weather.gov/alerts/active`. No key, no account. Alerts are matched to your station's exact coordinates and use CAP severity directly.
+
+```python
+ALERT_REGION = "us"
+```
+
+#### 🇬🇧 United Kingdom — Met Office
+
+Source: the Met Office public warnings feed. No key, no account. This one **does** need a setting: the Met Office publishes warnings by region rather than by point, so you have to say which region you are in.
+
+```python
+ALERT_REGION = "uk"
+ALERT_AREA = "wl"        # your region code from the table below
+```
+
+| Code | Region | Code | Region |
+|------|--------|------|--------|
+| `uk` | UK — everything, national feed | `wl` | Wales |
+| `ni` | Northern Ireland | `sw` | South West England |
+| `os` | Orkney & Shetland | `se` | London & South East England |
+| `he` | Highlands & Eilean Siar | `ee` | East of England |
+| `gr` | Grampian | `em` | East Midlands |
+| `ta` | Central, Tayside & Fife | `wm` | West Midlands |
+| `st` | Strathclyde | `yh` | Yorkshire & Humber |
+| `dg` | Dumfries, Galloway, Lothian & Borders | `nw` | North West England |
+| | | `ne` | North East England |
+
+Leaving `ALERT_AREA` unset uses the national `uk` feed, which will show you warnings for anywhere in the country — fine if you want the national picture, noisy if you don't. Pick your own region for a panel that only lights up when it concerns you.
+
+Verify with `venv/bin/python3 main.py --check-alerts`, which prints the region it resolved and names it back to you:
+
+```
+  Region      : uk (configured)
+  Met Office  : wl — Wales
+```
+
+#### Anywhere else
+
+There is no feed, and `--check-alerts` will say so. The panel works exactly as it does with no alert active — you simply never get a beacon. To silence the auto-detection message:
+
+```python
+ALERT_REGION = "none"
+```
+
+### Other settings
+
+```python
+LATITUDE = 43.6532       # only if the panel is not where the station is
+LONGITUDE = -79.3832
+```
+
+Set these if the alert location should differ from the station's own coordinates. Both must be set together. They can also be given as environment variables — `TEMPEST_ALERT_REGION`, `TEMPEST_ALERT_AREA`, `TEMPEST_LAT`, `TEMPEST_LON` — which take precedence over `~/secrets.py`.
+
+### Near the border
+
+If your station is anywhere in the wide band where the Canadian and US bounding boxes overlap — Toronto is further south than Minneapolis — the panel will **not** guess a country from coordinates alone, because serving the wrong country's warnings is worse than serving none. It normally resolves this from your station's timezone. If it can't, `--check-alerts` prints:
+
+```
+Station sits in the Canada/US border band — set ALERT_REGION to ca or us.
+```
+
+Set `ALERT_REGION` explicitly and it is settled.
+
+### When the feed fails
+
+A failed alert fetch is always treated as "no alert", never as an error. The feed is a second network dependency and is never allowed to take the weather display down with it — if the alert service is unreachable you still get your weather.
+
+The last alert is cached in `~/.tempest-alert.json` with its expiry, so a brief outage doesn't drop a warning off the panel mid-storm, and the cache is discarded once the alert expires. The cache is keyed to the feed it came from, so changing `ALERT_REGION` never resurfaces the previous region's alerts.
 
 ---
 
@@ -126,6 +245,7 @@ The display will update automatically ~2 minutes after boot, then every 15 minut
 |---------|--------|
 | **Refresh schedule** | Adaptive: every 15 min normally, 10 min when rain is likely in the next hour, 30 min overnight (22:00–06:00). The timer ticks every 5 min and `main.py` decides whether a tick is due. |
 | **Stale data** | If a fetch fails, the last good reading is redrawn with a `STALE` marker instead of wiping the panel |
+| **Weather alerts** | One extra request to Environment Canada, the NWS or the Met Office, picked from your station's location. A failure here is always "no alert" and never affects the weather |
 | **Virtual environment** | Self-contained; immune to system Python upgrades |
 | **Network resilience** | Waits up to 2 minutes for WiFi before fetching |
 | **API retry** | Up to 3 attempts with exponential backoff on failure |
@@ -188,6 +308,25 @@ curl -s "https://swd.weatherflow.com/swd/rest/observations/station/YOUR_ID?token
 cat ~/secrets.py
 ```
 
+### Alerts never appear
+
+The alert feed is deliberately silent — every failure is treated as "no alert" so it can never take the weather down with it — so the way to tell "nothing is happening" from "nothing is wired up" is to ask:
+
+```bash
+cd ~/tempest-inky
+venv/bin/python3 main.py --check-alerts
+```
+
+| It says | What to do |
+|---------|------------|
+| `Region: ca` / `us` / `uk` and no alert | Working. There is nothing to warn about right now. |
+| `Region: none` | No feed for your location, or auto-detection failed — set `ALERT_REGION` in `~/secrets.py`. |
+| `Station sits in the Canada/US border band` | Set `ALERT_REGION = "ca"` or `"us"` explicitly. |
+| `UNKNOWN REGION CODE` | Your `ALERT_AREA` is not a Met Office region — pick one from the table in [Weather alerts](#weather-alerts). |
+| `Alert fetch failed` | The national service is unreachable or down. The weather panel is unaffected; it will retry on the next refresh. |
+
+Remember that the beacon only fires for **official government alerts**, never for ordinary conditions — a thunderstorm with no warning issued against it leaves the hero white.
+
 ### SPI / display not detected
 
 Verify SPI is enabled:
@@ -214,6 +353,12 @@ venv/bin/python3 main.py --force
 ```
 
 `--force` renders immediately, ignoring the adaptive schedule. Without it, a run that is not yet due exits straight away without fetching or repainting.
+
+```bash
+venv/bin/python3 main.py --check-alerts
+```
+
+`--check-alerts` reports which alert feed your station resolves to and what it returns right now, then exits without touching the display. See [Weather alerts](#weather-alerts).
 
 ---
 
