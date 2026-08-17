@@ -18,10 +18,10 @@ Four full-width regions with fixed geometry — nothing moves between refreshes,
 
 | Region | Contents |
 |--------|----------|
-| **Hero** (300 px) | The condition as a 168 px glyph, the temperature at 228 px in whole degrees, and today's high and low. Fills with the alert colour when a government warning is active — a field of ink has no legibility threshold at all, so it registers from anywhere in the room. |
+| **Hero** (210 px) | The condition as a 132 px glyph, the temperature at 182 px in whole degrees, and today's high and low split by a rule. Fills with the alert colour when a government warning is active — a field of ink has no legibility threshold at all, so it registers from anywhere in the room. |
 | **Headline band** (80 px) | The single highest-priority thing worth knowing — an official alert, lightning, rain starting, gusts, frost, or station trouble — with the figure that qualifies it. Reads `ALL CLEAR TODAY` when all is quiet, and keeps its height either way. The exact temperature lives here, since the hero rounds. |
-| **Metrics line** (44 px) | Dew point, rain today, wind, pressure and daylight — always these five, always in this order, identified by glyph alone. A metric with no data shows a dash rather than disappearing. |
-| **Ten days** (52 px) | Each day's high, with an 8 px bar of condition colour beneath it. Cloud spends no ink — it draws white with a black keyline — so a dull week is nearly monochrome and colour across the room always means something changed. |
+| **Metrics row** (92 px) | Dew point, rain today, wind, pressure and daylight — always these five, always in this order, each labelled with its unit. A metric with no data shows a dash rather than disappearing. |
+| **Ten days** (98 px) | Each day's condition glyph and high, over a 10 px bar of condition colour. Cloud spends no ink — it draws white with a black keyline — so a dull week is nearly monochrome and colour across the room always means something changed. |
 
 ---
 
@@ -29,7 +29,7 @@ Four full-width regions with fixed geometry — nothing moves between refreshes,
 
 The panel can carry official government warnings. The Tempest API does not have them — alerting is a TempestOne feature, not part of the public API — so this is one extra request to a national weather service. It is entirely optional and off unless a feed is available for your location.
 
-When an alert is active the whole 800×300 hero fills with its severity colour, and the headline band shows the event name and when it expires.
+When an alert is active the whole 800×210 hero fills with its severity colour, and the headline band shows the event name and when it expires.
 
 | Level | Colour | Meaning |
 |-------|--------|---------|

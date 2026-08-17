@@ -1,4 +1,4 @@
-"""Tempest Inky dashboard — layout 5B.
+"""Tempest Inky dashboard — layout 7A.
 
 Renders an 800x480 panel for the Pimoroni Inky Impression 7.3" (7 colour)
 from a WeatherFlow Tempest station, plus an optional government alert feed.
@@ -8,10 +8,10 @@ reading needs a cap height of roughly distance / 200, which at 137 ppi is
 ~122 px — and Archivo Black's caps run ~0.72em, so couch-readable type
 starts at 170 px. There is no arrangement of 800x480 that makes two text
 elements couch-readable, so the panel carries exactly two things at that
-distance: a number and a shape. The 228 px temperature and the 168 px
+distance: a number and a shape. The 182 px temperature and the 132 px
 condition glyph. Everything else is a walk-up element and is sized as one.
 
-Colour is a categorical channel only. The 800x300 hero field carries
+Colour is a categorical channel only. The 800x210 hero field carries
 official alert severity and nothing else; the small fills (ten-day bars)
 carry condition and nothing else. All type is black, or white on blue.
 """
@@ -215,47 +215,67 @@ WI = {
 # stay byte-identical between refreshes and between states, or the panel
 # ghosts: only fills and text content are allowed to change.
 #
-# The handoff lists 300 + 80 + 44 + 52, which sums to 476 rather than 480 —
-# the HTML leaves a 4 px white strip below the last row. The ten-day region
-# takes that strip (56 px) and keeps its content top-aligned at exactly the
-# specified 18 / 24 / 8, so it renders identically with nothing left over.
+# Layout 7A. The 5A/5B hero was 300 px tall to hold a 228 px numeral that
+# lays down only ~178 px of ink at line-height 0.78, so ~90 px of that region
+# was empty by construction while the metrics row survived on 44 px. The
+# couch threshold is 170 px; 182 px still reads to 4.8 m, and the 90 px goes
+# downward — which is what buys back the metric labels and the per-day glyph.
 
 RULE = 4
 
-HERO_H = 300
+HERO_H = 210
 BAND_H = 80
-METRICS_H = 44
-TENDAY_H = 56
+METRICS_H = 92
+TENDAY_H = 98
 
-HERO_Y0, HERO_Y1 = 0, HERO_H                            # 0   - 300
-BAND_Y0, BAND_Y1 = HERO_Y1, HERO_Y1 + BAND_H            # 300 - 380
-METRICS_Y0, METRICS_Y1 = BAND_Y1, BAND_Y1 + METRICS_H   # 380 - 424
-TEN_Y0, TEN_Y1 = METRICS_Y1, METRICS_Y1 + TENDAY_H      # 424 - 480
+HERO_Y0, HERO_Y1 = 0, HERO_H                            # 0   - 210
+BAND_Y0, BAND_Y1 = HERO_Y1, HERO_Y1 + BAND_H            # 210 - 290
+METRICS_Y0, METRICS_Y1 = BAND_Y1, BAND_Y1 + METRICS_H   # 290 - 382
+TEN_Y0, TEN_Y1 = METRICS_Y1, METRICS_Y1 + TENDAY_H      # 382 - 480
 
-PAD_X = 22
-HERO_GAP = 10
+PAD_X = 22          # hero and band
+PAD_X_ROW = 20      # metrics and ten-day
+HERO_GAP = 8
 BAND_GAP = 14
-METRIC_GAP = 7
+METRIC_GAP = 6      # metric glyph to its value
+CELL_GAP = 4        # between metric cells
 TEN_GAP = 4
 
-# Type scale. Nothing under 19 px except the 16 px day labels, which are the
-# shortest strings on the panel.
-SIZE_TEMP = 228
-SIZE_HERO_GLYPH = 168
-SIZE_HERO_GLYPH_MIN = 130
-SIZE_HILO = 46
-SIZE_BAND_GLYPH = 42
-SIZE_HEADLINE = 40
-SIZE_METRIC_GLYPH = 26
-SIZE_METRIC = 24
-SIZE_FIGURE = 24
-SIZE_TEN_HIGH = 22
+# Type scale. Nothing under 19 px anywhere on the panel.
+SIZE_TEMP = 182
+SIZE_HERO_GLYPH = 132
+SIZE_HERO_GLYPH_MIN = 104
+SIZE_HILO = 52
+SIZE_BAND_GLYPH = 44
+SIZE_HEADLINE = 42
+SIZE_FIGURE = 26
+SIZE_METRIC_GLYPH = 30
+SIZE_METRIC_GLYPH_MIN = 26
+SIZE_METRIC = 33
+SIZE_TEN_GLYPH = 30
+SIZE_TEN_HIGH = 28
+SIZE_DAY = 20
 SIZE_LABEL = 19
-SIZE_DAY = 16
 
 TRACK_TEMP = -0.035 * SIZE_TEMP     # letter-spacing -0.035em
-TRACK_LABEL = 0.1 * SIZE_LABEL      # letter-spacing 0.1em
+TRACK_LABEL = 0.04 * SIZE_LABEL     # letter-spacing 0.04em
 
+# The high/low divider: 3 px of rule with 5 px of air either side. It is the
+# only thing distinguishing the two numbers now that the labels are gone.
+HILO_RULE = 3
+HILO_RULE_MARGIN = 5
+HILO_LINE = round(SIZE_HILO * 1.05)     # the design's line-height
+
+# The band's right-hand figure never shrinks below its first clause: 160 px
+# holds `until 06:00` and `STALE · 18:51` at 26 px.
+FIGURE_RESERVE = 160
+
+# Pressure trend arrow, drawn after the value when the cell has room for it.
+TREND_ARROW = 14
+TREND_GAP = 5
+
+# Load-bearing: an earlier revision of the spec summed to 476 and silently
+# squeezed the ten-day condition bar.
 assert HERO_H + BAND_H + METRICS_H + TENDAY_H == HEIGHT
 
 
@@ -309,16 +329,26 @@ def type_on(ink):
     return WHITE if ink == INK_SNOW else BLACK
 
 
+def _rounded(value, decimals):
+    """Round for display, without printing a negative zero.
+
+    -0.4 C formats to "-0" at zero decimals, which reads as a distinct
+    temperature rather than as zero.
+    """
+    out = f"{value:.{decimals}f}"
+    return out[1:] if out.startswith("-") and float(out) == 0 else out
+
+
 def fmt_temp(value, decimals=0):
     if value is None:
         return DASH
-    return f"{value:.{decimals}f}°"
+    return f"{_rounded(value, decimals)}°"
 
 
 def fmt_num(value, decimals=0, suffix=""):
     if value is None:
         return DASH
-    return f"{value:.{decimals}f}{suffix}"
+    return f"{_rounded(value, decimals)}{suffix}"
 
 
 def hhmm(epoch):
@@ -330,7 +360,7 @@ def hhmm(epoch):
 def glyph_advance(draw, char, size):
     """Width actually consumed by an icon glyph.
 
-    Weather Icons glyphs vary from 124 px to 237 px wide at 168 px, so the
+    Weather Icons glyph advances vary by more than a factor of two, so the
     text beside one cannot sit at a fixed offset.
     """
     font = icon(size)
@@ -1287,18 +1317,17 @@ def fit_figure(draw, figure, font, max_width):
     return ""
 
 
-# ── Region 1: hero (y 0-300) ──────────────────────────────────────────────────
+# ── Region 1: hero (y 0-210) ──────────────────────────────────────────────────
 
 def hero_glyph_size(draw, glyph, temp_str, column_width):
-    """168 px unless the row would overflow, then as much as fits.
+    """132 px unless the row would overflow, then as much as fits.
 
-    The design's 168 px assumes a glyph around 186 px wide. Weather Icons
-    advances run from 124 px to 237 px at that size, and the composite
-    day-rain and partly-cloudy glyphs plus a four-character temperature
-    overflow the row by up to 33 px. Type sizes never move, so the glyph
-    gives way — a 144 px silhouette still reads at 4.5 m.
+    Weather Icons advances vary by more than a factor of two at a given
+    size, so the composite day-rain and partly-cloudy glyphs beside a
+    four-character temperature can overflow the row. Type sizes never move,
+    so the glyph gives way — a 110 px silhouette still reads at 4.5 m.
     """
-    # Two gaps: glyph to temperature, and temperature to the HIGH/LOW column.
+    # Two gaps: glyph to temperature, and temperature to the high/low column.
     available = WIDTH - 2 * PAD_X - column_width - 2 * HERO_GAP
     available -= tracked_width(draw, temp_str, display(SIZE_TEMP), TRACK_TEMP)
     size = SIZE_HERO_GLYPH
@@ -1310,7 +1339,7 @@ def hero_glyph_size(draw, glyph, temp_str, column_width):
 def draw_hero(draw, weather):
     """Glyph, temperature and today's range, on the alert severity field.
 
-    The field is the beacon: a full-bleed 800x296 area of ink has no
+    The field is the beacon: a full-bleed 800x206 area of ink has no
     legibility threshold at all, so it stays detectable in peripheral vision
     where no type can. It is also the heaviest possible e-ink refresh, and
     red is among the slowest inks — so it fires only for an official alert,
@@ -1328,31 +1357,32 @@ def draw_hero(draw, weather):
     centre_y = (HERO_Y0 + content_bottom) / 2
     right = WIDTH - PAD_X
 
-    # Right-hand HIGH/LOW column, measured first because the hero row is
-    # sized around it.
-    label_font, value_font = text(SIZE_LABEL), display(SIZE_HILO)
+    # Right-hand high/low column, measured first because the hero row is
+    # sized around it. No HIGH/LOW labels: the upper number is the high, the
+    # lower one is the low, and the divider says so. Bigger, and less to read.
+    value_font = display(SIZE_HILO)
     high_str = fmt_temp(weather.get("today_high"))
     low_str = fmt_temp(weather.get("today_low"))
     column_width = max(
         draw.textlength(high_str, font=value_font),
         draw.textlength(low_str, font=value_font),
-        tracked_width(draw, "HIGH", label_font, TRACK_LABEL),
-        tracked_width(draw, "LOW", label_font, TRACK_LABEL),
     )
 
-    # 19 + 2 + 46 + 2 + 8 + 19 + 2 + 46, centred on the region.
-    column_height = 2 * SIZE_LABEL + 2 * SIZE_HILO + 3 * 2 + 8
+    # 55 + 5 + 3 + 5 + 55, centred on the region.
+    column_height = 2 * HILO_LINE + 2 * HILO_RULE_MARGIN + HILO_RULE
     y = centre_y - column_height / 2
-    for label, value in (("HIGH", high_str), ("LOW", low_str)):
-        draw_tracked(
-            draw, right, baseline_for(draw, label, label_font, y + SIZE_LABEL / 2),
-            label, label_font, TRACK_LABEL, fill=fg, align="right",
-        )
-        y += SIZE_LABEL + 2
-        draw_centred(
-            draw, right, y + SIZE_HILO / 2, value, value_font, fill=fg, anchor_x="r",
-        )
-        y += SIZE_HILO + 2 + 8
+    draw_centred(
+        draw, right, y + HILO_LINE / 2, high_str, value_font, fill=fg, anchor_x="r",
+    )
+    y += HILO_LINE + HILO_RULE_MARGIN
+    rule_left = round(right - column_width)
+    draw.rectangle(
+        [rule_left, round(y), right - 1, round(y) + HILO_RULE - 1], fill=fg,
+    )
+    y += HILO_RULE + HILO_RULE_MARGIN
+    draw_centred(
+        draw, right, y + HILO_LINE / 2, low_str, value_font, fill=fg, anchor_x="r",
+    )
 
     # Temperature: whole degrees only. 22 degrees, not 21.8 — dropping the
     # decimal is 35 % narrower, which is what funds the size. The exact
@@ -1361,12 +1391,12 @@ def draw_hero(draw, weather):
     temp = weather.get("temp")
     temp_font = display(SIZE_TEMP)
     if temp is None:
-        # An em dash at 228 px is a solid black slab that reads as a
+        # An em dash at 182 px is a solid black slab that reads as a
         # redaction rather than as a missing reading, so the no-data mark
         # drops to the tier-2 size on the same baseline.
         temp_str, temp_font, track = DASH, display(SIZE_HILO), 0.0
     else:
-        temp_str, track = f"{temp:.0f}°", TRACK_TEMP
+        temp_str, track = fmt_temp(temp), TRACK_TEMP
 
     glyph = condition_glyph(weather.get("icon_name"), is_night(weather))
     glyph_size = hero_glyph_size(draw, glyph, temp_str if temp is not None else "", column_width)
@@ -1380,12 +1410,12 @@ def draw_hero(draw, weather):
     )
 
 
-# ── Region 2: headline band (y 300-380) ───────────────────────────────────────
+# ── Region 2: headline band (y 210-290) ───────────────────────────────────────
 
 def draw_band(draw, weather):
     """One line: what is happening, and the figure that qualifies it.
 
-    White ground in both 5A and 5B — the colour channel belongs to the hero
+    White ground: the colour channel belongs to the hero
     field, and a second coloured region would put severity and condition ink
     side by side.
     """
@@ -1406,29 +1436,38 @@ def draw_band(draw, weather):
     else:
         figure = concern.get("figure") or ""
 
+    # The headline is measured first and the figure takes what is left. The
+    # copy is authored to fit at 42 px, and the figure is the element built
+    # to give way — fit_figure drops its trailing clauses one at a time, so
+    # `until 04:01 · -8.6°` becomes `until 04:01` rather than the headline
+    # collapsing to `WARNING`. FIGURE_RESERVE keeps the first clause alive
+    # even against a headline that wants the whole band.
     figure_font = bold(SIZE_FIGURE)
-    figure = fit_figure(draw, figure, figure_font, (WIDTH - 2 * PAD_X) * 0.42)
     figure_width = draw.textlength(figure, font=figure_font) if figure else 0
+    reserved = min(figure_width, FIGURE_RESERVE) + BAND_GAP if figure else 0
 
     headline_font = display(SIZE_HEADLINE)
-    headline_max = right - x - (figure_width + BAND_GAP if figure else 0)
-    headline = shorten_headline(draw, concern["headline"], headline_font, headline_max)
+    headline = shorten_headline(draw, concern["headline"], headline_font, right - x - reserved)
     draw_centred(draw, x, centre_y, headline, headline_font)
 
     if figure:
-        draw_centred(draw, right, centre_y, figure, figure_font, anchor_x="r")
+        used = draw.textlength(headline, font=headline_font)
+        figure = fit_figure(draw, figure, figure_font, right - x - used - BAND_GAP)
+        if figure:
+            draw_centred(draw, right, centre_y, figure, figure_font, anchor_x="r")
 
 
-# ── Region 3: metrics line (y 380-424) ────────────────────────────────────────
+# ── Region 3: metrics row (y 290-382) ────────────────────────────────────────
 
 def metric_values(weather):
     """The five metrics and their order are fixed forever.
 
     That is what guarantees nothing is ever missing: the number you want is
     always in the position you last found it. A metric with no data renders
-    an em dash — it does not vanish and it is not reordered. There are no
-    text labels: the glyph is the label, which is fine at 0.5 m and saves
-    48 px of height.
+    an em dash — it does not vanish and it is not reordered.
+
+    Units live in the label, never in the value. A cell is only ~149 px
+    wide at 33 px, and `1021` beside `13h56` collides otherwise.
 
     Lightning has no metric: it is an event, not a standing value, so it
     appears in the headline band at priority 3 and nowhere else.
@@ -1446,66 +1485,117 @@ def metric_values(weather):
         daylight = DASH
 
     return [
-        {"glyph": WI["snowflake"], "value": fmt_temp(dew, 1)},
-        {"glyph": WI["raindrop"], "value": fmt_num(rain, 1, "mm")},
-        {"glyph": WI["wind"], "value": fmt_num(wind, 0)},
+        {"label": "DEW °C", "glyph": WI["snowflake"], "value": fmt_num(dew, 0)},
+        {"label": "RAIN mm", "glyph": WI["raindrop"], "value": fmt_num(rain, 1)},
+        {"label": "WIND km/h", "glyph": WI["wind"], "value": fmt_num(wind, 0)},
         {
+            "label": "PRESS hPa",
             "glyph": WI["barometer"],
             "value": fmt_num(pressure, 0),
             "trend": weather.get("pressure_trend", "steady") if pressure is not None else None,
         },
-        {"glyph": WI["sunrise"], "value": daylight},
+        {"label": "DAYLIGHT", "glyph": WI["sunrise"], "value": daylight},
     ]
 
 
+# 19 px at the design's 1.1 line-height, a 3 px gap, then the glyph and the
+# value sharing a 33 px line.
+METRIC_LABEL_LINE = 21
+METRIC_LABEL_GAP = 3
+
+
 def draw_metrics(draw, weather):
+    """Five equal cells: label over glyph-and-value, each centred in its cell.
+
+    The label is back in 7A, and it carries the unit — which is what lets
+    the value be 33 px instead of 24 px in the same width.
+    """
     content_bottom = METRICS_Y1 - RULE
     draw.rectangle([0, content_bottom, WIDTH - 1, METRICS_Y1 - 1], fill=BLACK)
 
-    centre_y = (METRICS_Y0 + content_bottom) / 2
-    cell_w = (WIDTH - 2 * PAD_X) / 5
+    cell_w = (WIDTH - 2 * PAD_X_ROW - CELL_GAP * 4) / 5
+    label_font = text(SIZE_LABEL)
     value_font = display(SIZE_METRIC)
 
+    block_h = METRIC_LABEL_LINE + METRIC_LABEL_GAP + SIZE_METRIC
+    top = METRICS_Y0 + (content_bottom - METRICS_Y0 - block_h) / 2
+    label_centre = top + METRIC_LABEL_LINE / 2
+    row_centre = top + METRIC_LABEL_LINE + METRIC_LABEL_GAP + SIZE_METRIC / 2
+
     for i, metric in enumerate(metric_values(weather)):
-        x = PAD_X + i * cell_w
-        draw_centred(draw, x, centre_y, metric["glyph"], icon(SIZE_METRIC_GLYPH))
-        x += glyph_advance(draw, metric["glyph"], SIZE_METRIC_GLYPH) + METRIC_GAP
-        draw_centred(draw, x, centre_y, metric["value"], value_font)
+        centre_x = PAD_X_ROW + i * (cell_w + CELL_GAP) + cell_w / 2
 
+        label = metric["label"]
+        draw_tracked(
+            draw,
+            centre_x - tracked_width(draw, label, label_font, TRACK_LABEL) / 2,
+            baseline_for(draw, label, label_font, label_centre),
+            label, label_font, TRACK_LABEL,
+        )
+
+        # The cell clips in the HTML. In PIL nothing clips, so when a value
+        # runs wide the glyph gives way instead — the same rule as the hero,
+        # and it never takes the glyph below the 26 px icon floor.
+        glyph, value = metric["glyph"], metric["value"]
+        value_w = draw.textlength(value, font=value_font)
         trend = metric.get("trend")
+        arrow_w = TREND_GAP + TREND_ARROW if trend else 0
+        glyph_size = SIZE_METRIC_GLYPH
+        while glyph_size > SIZE_METRIC_GLYPH_MIN and (
+            glyph_advance(draw, glyph, glyph_size) + METRIC_GAP + value_w + arrow_w > cell_w
+        ):
+            glyph_size -= 1
+        glyph_w = glyph_advance(draw, glyph, glyph_size)
+
+        x = centre_x - (glyph_w + METRIC_GAP + value_w + arrow_w) / 2
+        draw_centred(draw, x, row_centre, glyph, icon(glyph_size))
+        x += glyph_w + METRIC_GAP
+        draw_centred(draw, x, row_centre, value, value_font)
         if trend:
-            x += draw.textlength(metric["value"], font=value_font) + 5
-            draw_trend_arrow(draw, x, centre_y, 13, trend)
+            draw_trend_arrow(draw, x + value_w + TREND_GAP, row_centre, TREND_ARROW, trend)
 
 
-# ── Region 4: ten-day row (y 424-480) ─────────────────────────────────────────
+# ── Region 4: ten-day row (y 382-480) ─────────────────────────────────────────
 
-TEN_DAY_H = 18
-TEN_HIGH_H = 24
-TEN_BAR_H = 8
+# 6 px of top padding, then day, glyph, high and the bar. The design's text
+# boxes are 22 / 32 / 30 over a 2 px margin and a 10 px bar, which is 96 px
+# inside a 92 px content box — the HTML resolves that by letting flexbox
+# shrink the three text boxes, and this does the same 4 px by hand. The bar
+# is the one box that must not give: it is 10 px exactly.
+TEN_PAD_TOP = 6
+TEN_DAY_H = 21
+TEN_GLYPH_H = 31
+TEN_HIGH_H = 28
+TEN_BAR_GAP = 2
+TEN_BAR_H = 10
+
+assert (TEN_PAD_TOP + TEN_DAY_H + TEN_GLYPH_H + TEN_HIGH_H
+        + TEN_BAR_GAP + TEN_BAR_H) == TENDAY_H
 
 
 def draw_tenday(draw, weather):
-    """Day, high, and an 8 px bar of condition ink.
+    """Day, condition glyph, high, and a 10 px bar of condition ink.
 
     No height encoding and no 0 C rule: there is no vertical room for a
-    scale. Condition is carried entirely by the bar's ink and temperature
-    entirely by the number, which is the honest split when a channel has to
-    go. The ten columns are always drawn, so the geometry cannot move
-    between refreshes even if the forecast comes back short.
+    scale. Condition is carried entirely by the glyph and the bar's ink,
+    temperature entirely by the number, which is the honest split when a
+    channel has to go. The ten columns are always drawn, so the geometry
+    cannot move between refreshes even if the forecast comes back short.
     """
     days = (weather.get("daily") or [])[:10]
-    col_w = (WIDTH - 2 * PAD_X - TEN_GAP * 9) / 10
+    col_w = (WIDTH - 2 * PAD_X_ROW - TEN_GAP * 9) / 10
 
     day_font = text(SIZE_DAY)
     high_font = display(SIZE_TEN_HIGH)
-    day_centre = TEN_Y0 + TEN_DAY_H / 2
-    high_centre = TEN_Y0 + TEN_DAY_H + TEN_HIGH_H / 2
-    bar_top = TEN_Y0 + TEN_DAY_H + TEN_HIGH_H
+    top = TEN_Y0 + TEN_PAD_TOP
+    day_centre = top + TEN_DAY_H / 2
+    glyph_centre = top + TEN_DAY_H + TEN_GLYPH_H / 2
+    high_centre = top + TEN_DAY_H + TEN_GLYPH_H + TEN_HIGH_H / 2
+    bar_top = top + TEN_DAY_H + TEN_GLYPH_H + TEN_HIGH_H + TEN_BAR_GAP
 
     for i in range(10):
         day = days[i] if i < len(days) else {}
-        left = PAD_X + i * (col_w + TEN_GAP)
+        left = PAD_X_ROW + i * (col_w + TEN_GAP)
         centre_x = left + col_w / 2
 
         draw_centred(draw, centre_x, day_centre, day.get("day", DASH), day_font, anchor_x="m")
@@ -1515,6 +1605,10 @@ def draw_tenday(draw, weather):
 
         if high is None:
             continue
+        draw_centred(
+            draw, centre_x, glyph_centre, condition_glyph(day.get("icon")),
+            icon(SIZE_TEN_GLYPH), anchor_x="m",
+        )
         box = [round(left), bar_top, round(left + col_w) - 1, bar_top + TEN_BAR_H - 1]
         ink = CATEGORY_INK.get(condition_category(day.get("icon"), high), WHITE)
         if ink == WHITE:
@@ -1533,7 +1627,7 @@ def draw_error_screen(draw, message):
 
 
 def create_dashboard(weather, theme_name="inky"):
-    """Render layout 5B.
+    """Render layout 7A.
 
     theme_name is accepted for backwards compatibility with desktop.py;
     the panel and the desktop window render identically, so the desktop
@@ -1580,7 +1674,7 @@ def flatten_text_edges(img):
     PIL anti-aliases text, and with DITHER_NONE those grey edge pixels land
     on whichever of the seven inks is nearest in RGB — which for mid-grey is
     orange, so black type on white picks up a coloured fringe that is very
-    visible at 228 px. Type on this panel is only ever black or white, so
+    visible at 182 px. Type on this panel is only ever black or white, so
     any near-neutral pixel is a text edge and is resolved to one or the
     other. Coloured fills are left alone: they are not neutral, and the
     edge between black type and a severity field quantises correctly on its
