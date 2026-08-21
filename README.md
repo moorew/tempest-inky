@@ -4,7 +4,7 @@ A Python application for the Raspberry Pi that displays a weather dashboard on a
 
 The layout is built to be read from a sofa, about 4.5 m away, in a dim room. Type is sized by viewing distance — comfortable reading needs a cap height of roughly distance ÷ 200 — and at that distance only one text element can ever be legible. So the panel carries exactly two things across the room: a number and a shape. Everything else is sized for walk-up.
 
-Colour is categorical, never decorative. The hero field carries official alert severity and nothing else; the small fills carry condition and nothing else.
+Colour is fill, never type, and each ink does at most two jobs. The left column's field carries official alert severity and nothing else; the forecast bars carry absolute temperature and nothing else. Condition is carried by glyphs and has no ink of its own, so a mild, quiet week renders almost entirely black and white — and colour appearing across the room always means something changed.
 
 ![Dashboard preview](dashboard-preview.png)
 
@@ -14,14 +14,16 @@ Colour is categorical, never decorative. The hero field carries official alert s
 
 ## What's on the display
 
-Four full-width regions with fixed geometry — nothing moves between refreshes, which is what keeps an e-ink panel from ghosting and means the number you want is always where you last found it.
+Two columns split by a rule at x=362, with fixed geometry — nothing moves between refreshes, which is what keeps an e-ink panel from ghosting and means the number you want is always where you last found it.
 
-| Region | Contents |
-|--------|----------|
-| **Hero** (210 px) | The condition as a 132 px glyph, the temperature at 182 px in whole degrees, and today's high and low split by a rule. Fills with the alert colour when a government warning is active — a field of ink has no legibility threshold at all, so it registers from anywhere in the room. |
-| **Headline band** (80 px) | The single highest-priority thing worth knowing — an official alert, lightning, rain starting, gusts, frost, or station trouble — with the figure that qualifies it. Reads `ALL CLEAR TODAY` when all is quiet, and keeps its height either way. The exact temperature lives here, since the hero rounds. |
-| **Metrics row** (92 px) | Dew point, rain today, wind, pressure and daylight — always these five, always in this order, each labelled with its unit. A metric with no data shows a dash rather than disappearing. |
-| **Ten days** (98 px) | Each day's condition glyph and high, over a 10 px bar of condition colour. Cloud spends no ink — it draws white with a black keyline — so a dull week is nearly monochrome and colour across the room always means something changed. |
+| Zone | Contents |
+|------|----------|
+| **NOW** (362 × 480, left) | The condition as a 100 px glyph, the temperature at 172 px in whole degrees, and below a rule, the feels-like and today's high and low on a shared label column. Fills with the alert colour when a government warning is active — a field of ink has no legibility threshold at all, so it registers from anywhere in the room. |
+| **METRICS** (168 px) | Wind, rain, pressure and daylight in a 2×2 grid — always these four, always in this order, each carrying its unit in the label so the value stays as large as the cell allows. A metric with no data shows a dash rather than disappearing. |
+| **NEXT** (160 px) | The single highest-priority thing worth knowing — an official alert, lightning, rain starting, gusts, frost, or station trouble — in sentence case, over a sub-line of qualifying figures, over the next four hours. Reads `All clear today` when all is quiet, and keeps its height either way. The exact temperature lives on the sub-line, since the hero rounds. |
+| **LATER** (152 px) | Five days: name, condition glyph, a 12 px temperature bar and the high. Bar *length* is relative to that week's own range, so it shows the week's shape; bar *fill* is absolute — blue below 0 °C, green to 9, white to 19, then yellow, orange and red — so it shows the week's level. There is no key: the high is printed beside every bar, so the panel teaches its own scale. |
+
+Times are always absolute. The panel can be 15 minutes stale, so "in 3h 25m" is wrong for 14 of every 15 minutes; `18:00` never is.
 
 ---
 
@@ -251,6 +253,7 @@ The display will update automatically ~2 minutes after boot, then every 15 minut
 | **API retry** | Up to 3 attempts with exponential backoff on failure |
 | **Logging** | systemd journal (RAM-backed; no extra SD card wear) |
 | **Hang protection** | systemd kills the process after 5 minutes |
+| **Type** | Jost 300/400/600 and Weather Icons, both SIL OFL and committed to `assets/`. Figures are tabular, so values do not shuffle sideways between refreshes |
 
 ---
 
@@ -359,6 +362,18 @@ venv/bin/python3 main.py --check-alerts
 ```
 
 `--check-alerts` reports which alert feed your station resolves to and what it returns right now, then exits without touching the display. See [Weather alerts](#weather-alerts).
+
+```bash
+venv/bin/python3 main.py --preview /tmp/panel.png
+```
+
+`--preview` writes the render to a PNG instead of pushing it to the panel, so the layout can be checked with no display attached. It ignores the refresh schedule and leaves it untouched.
+
+```bash
+venv/bin/python3 main.py --scenario storm --preview /tmp/storm.png
+```
+
+`--scenario` renders from canned data instead of fetching — `quiet`, `storm`, `snow`, `rain` and `heat` — which is how to check the alert beacon, the temperature bands and the four-hour strip without waiting for the weather. It touches neither the network nor the panel.
 
 ---
 

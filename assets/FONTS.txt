@@ -1,0 +1,23 @@
+Fonts shipped with this repository
+==================================
+
+Both faces are licensed under the SIL Open Font License, Version 1.1. The
+licence text is in OFL.txt alongside this file, and applies to both.
+
+Jost — Jost-Light.ttf (300), Jost-Regular.ttf (400), Jost-SemiBold.ttf (600)
+  Copyright 2020 The Jost* Project Authors
+  https://github.com/indestructible-type/Jost
+  Static instances as served by Google Fonts.
+
+  A geometric sans in the Futura tradition: circular bowls, single-storey a,
+  uniform stroke. Futura is the mid-century typeface, which is why it suits
+  the room the panel lives in. 600 carries every numeral and the headline,
+  400 every label and sub-line, 300 the "/" between today's high and low and
+  nothing else.
+
+Weather Icons — weathericons.ttf
+  Copyright (c) 2013 Erik Flowers
+  https://erikflowers.github.io/weather-icons/
+
+  Meteorological rather than cartoon, single colour, and a font — so it hints
+  to the pixel grid at any size instead of being resampled from a PNG.

@@ -1,20 +1,31 @@
-"""Tempest Inky dashboard — layout 7A.
+"""Tempest Inky dashboard — layout 10.
 
 Renders an 800x480 panel for the Pimoroni Inky Impression 7.3" (7 colour)
 from a WeatherFlow Tempest station, plus an optional government alert feed.
 
 The panel is read from a sofa about 4.5 m away, in a dim room. Comfortable
 reading needs a cap height of roughly distance / 200, which at 137 ppi is
-~122 px — and Archivo Black's caps run ~0.72em, so couch-readable type
-starts at 170 px. There is no arrangement of 800x480 that makes two text
-elements couch-readable, so the panel carries exactly two things at that
-distance: a number and a shape. The 182 px temperature and the 132 px
-condition glyph. Everything else is a walk-up element and is sized as one.
+~122 px — and Jost's caps run ~0.70em, so couch-readable type starts at
+170 px. There is no arrangement of 800x480 that makes two text elements
+couch-readable, so the panel carries exactly two things at that distance:
+a number and a shape. The 172 px temperature and the 100 px condition
+glyph. Everything else is a room-distance or walk-up element and is sized
+as one.
 
-Colour is a categorical channel only. The 800x210 hero field carries
-official alert severity and nothing else; the small fills (ten-day bars)
-carry condition and nothing else. All type is black, or white on blue.
+Two columns split by a 3 px rule at x=362: NOW on the left at full height,
+and METRICS / NEXT / LATER stacked on the right at 168 + 160 + 152.
+
+The layout is a grid, not a set of centred boxes. Three rules generate most
+of the numbers: one 24 px margin every zone insets by, fixed-width label
+columns so values start on shared verticals, and nothing within 12 px of a
+rule.
+
+Colour is fill only. The 362x480 left field carries official alert severity
+and nothing else; the 12 px forecast bars carry absolute temperature and
+nothing else. Condition is carried by glyphs and has no ink of its own. All
+type is black, or white on blue.
 """
+
 
 import argparse
 import importlib.util
@@ -129,11 +140,19 @@ def load_config():
 
 STATION_ID, TOKEN = load_config()
 
+
 BASE_DIR = get_base_path()
 ASSETS_ROOT = os.path.join(BASE_DIR, "assets")
-FONT_DISPLAY = os.path.join(ASSETS_ROOT, "ArchivoBlack-Regular.ttf")
-FONT_TEXT = os.path.join(ASSETS_ROOT, "AtkinsonHyperlegible-Regular.ttf")
-FONT_BOLD = os.path.join(ASSETS_ROOT, "AtkinsonHyperlegible-Bold.ttf")
+
+# One family: Jost, a geometric sans in the Futura tradition, which is what
+# suits a mid-century room. 600 for every numeral and the headline, 400 for
+# every label and sub-line, 300 for the `/` between high and low and
+# nothing else. Plus Weather Icons for every glyph — meteorological rather
+# than cartoon, and a font, so it hints to the pixel grid at any size
+# instead of being resampled from a 712 px PNG.
+FONT_SEMIBOLD = os.path.join(ASSETS_ROOT, "Jost-SemiBold.ttf")
+FONT_REGULAR = os.path.join(ASSETS_ROOT, "Jost-Regular.ttf")
+FONT_LIGHT = os.path.join(ASSETS_ROOT, "Jost-Light.ttf")
 FONT_ICON = os.path.join(ASSETS_ROOT, "weathericons.ttf")
 
 WIDTH = 800
@@ -143,34 +162,38 @@ HEIGHT = 480
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
-INK_CLEAR = (255, 255, 0)
-INK_RAIN = (0, 255, 0)
-INK_SNOW = (0, 0, 255)
-INK_STORM = (255, 0, 0)
-INK_HEAT = (255, 128, 0)
+INK_GREEN = (0, 255, 0)
+INK_BLUE = (0, 0, 255)
+INK_YELLOW = (255, 255, 0)
+INK_ORANGE = (255, 128, 0)
+INK_RED = (255, 0, 0)
 
-# Pimoroni Inky Impression 7-color palette.
+# Pimoroni Inky Impression 7-colour palette. This is the entire palette.
 INKY_PALETTE = [
-    BLACK, WHITE, INK_RAIN, INK_SNOW, INK_STORM, INK_CLEAR, INK_HEAT,
+    BLACK, WHITE, INK_GREEN, INK_BLUE, INK_RED, INK_YELLOW, INK_ORANGE,
 ]
 
-# Cloud is not an ink: it renders white with a black keyline, so a dull
-# week spends almost no colour.
-CATEGORY_INK = {
-    "clear": INK_CLEAR,
-    "cloud": WHITE,
-    "rain": INK_RAIN,
-    "snow": INK_SNOW,
-    "storm": INK_STORM,
-    "hot": INK_HEAT,
-}
+# Temperature, divergent rather than sequential. A sequential cold-to-hot
+# ramp renders the panel blue from November to March, because the palette
+# has exactly one cold ink. Here white sits in the comfortable band and ink
+# is spent only on departure from it, so a mild week is colourless and
+# colour appearing across the room always means something changed.
+TEMP_BANDS = [
+    (0, INK_BLUE),       # below 0
+    (10, INK_GREEN),     # 0-9
+    (20, WHITE),         # 10-19, drawn with a 2 px keyline
+    (25, INK_YELLOW),    # 20-24
+    (30, INK_ORANGE),    # 25-29
+    (None, INK_RED),     # 30 and above
+]
 
-# The alert ladder. Deliberately reuses inks from the condition scale: the
-# two are separated by region and size, and never occur in the same element.
+# The alert ladder. Deliberately reuses inks from the temperature scale: the
+# two are separated by region and size — the field is 362x480 and the bars
+# are 12 px — and they never occur in the same element.
 SEVERITY_INK = {
-    "advisory": INK_CLEAR,
-    "watch": INK_HEAT,
-    "warning": INK_STORM,
+    "advisory": INK_YELLOW,
+    "watch": INK_ORANGE,
+    "warning": INK_RED,
 }
 SEVERITY_RANK = {"advisory": 1, "watch": 2, "warning": 3}
 SEVERITY_COLOUR_NAME = {"advisory": "yellow", "watch": "orange", "warning": "red"}
@@ -180,103 +203,163 @@ MIDDOT = "·"
 
 # Verified against assets/weathericons.ttf — every one renders, no tofu.
 WI = {
-    "clear-day": "",
-    "clear-night": "",
-    "partly-cloudy-day": "",
-    "partly-cloudy-night": "",
-    "cloudy": "",
-    "overcast": "",
-    "rain": "",
-    "rain-night": "",
-    "day-rain": "",
-    "snow": "",
-    "snow-night": "",
-    "day-snow": "",
-    "sleet": "",
-    "thunderstorm": "",
-    "thunderstorm-night": "",
-    "fog": "",
-    "fog-night": "",
-    "wind": "",
-    "humidity": "",
-    "barometer": "",
-    "sunrise": "",
-    "sunset": "",
-    "snowflake": "",
-    "raindrop": "",
-    "lightning": "",
-    "hot": "",
-    "na": "",
+    "clear-day": "\uf00d",
+    "clear-night": "\uf02e",
+    "partly-cloudy-day": "\uf002",
+    "partly-cloudy-night": "\uf086",
+    "cloudy": "\uf013",
+    "overcast": "\uf013",
+    "rain": "\uf019",
+    "rain-night": "\uf028",
+    "day-rain": "\uf008",
+    "snow": "\uf01b",
+    "snow-night": "\uf02a",
+    "day-snow": "\uf00a",
+    "sleet": "\uf0b5",
+    "thunderstorm": "\uf01e",
+    "thunderstorm-night": "\uf02d",
+    "fog": "\uf014",
+    "fog-night": "\uf04a",
+    "wind": "\uf050",
+    "humidity": "\uf07a",
+    "barometer": "\uf079",
+    "sunrise": "\uf051",
+    "sunset": "\uf052",
+    "snowflake": "\uf076",
+    "raindrop": "\uf078",
+    "lightning": "\uf016",
+    "hot": "\uf072",
+    "na": "\uf07b",
 }
 
-# ── Region geometry ───────────────────────────────────────────────────────────
-# Four stacked full-width regions, each with a 4 px black bottom rule except
-# the last, and the rule lives inside the region's own height. Geometry must
-# stay byte-identical between refreshes and between states, or the panel
-# ghosts: only fills and text content are allowed to change.
-#
-# Layout 7A. The 5A/5B hero was 300 px tall to hold a 228 px numeral that
-# lays down only ~178 px of ink at line-height 0.78, so ~90 px of that region
-# was empty by construction while the metrics row survived on 44 px. The
-# couch threshold is 170 px; 182 px still reads to 4.8 m, and the 90 px goes
-# downward — which is what buys back the metric labels and the per-day glyph.
+# ── Geometry ──────────────────────────────────────────────────────────────────
+# Two columns split by a 3 px rule. Geometry must stay byte-identical between
+# refreshes and between states or the panel ghosts: zone heights, metric
+# count and order, and forecast row count never move. Only fills and text
+# content are allowed to change.
 
-RULE = 4
+RULE_ZONE = 3       # column rule and zone dividers
+RULE_INNER = 2      # dividers inside a zone, and the cloud-band keyline
+MARGIN = 24         # the one margin: every zone in both columns insets by it
+CLEARANCE = 12      # nothing sits closer than this to a rule
 
-HERO_H = 210
-BAND_H = 80
-METRICS_H = 92
-TENDAY_H = 98
+# The column rule occupies x=362..364; the right column starts at 365.
+COLUMN_X = 362
+RIGHT_X = COLUMN_X + RULE_ZONE
 
-HERO_Y0, HERO_Y1 = 0, HERO_H                            # 0   - 210
-BAND_Y0, BAND_Y1 = HERO_Y1, HERO_Y1 + BAND_H            # 210 - 290
-METRICS_Y0, METRICS_Y1 = BAND_Y1, BAND_Y1 + METRICS_H   # 290 - 382
-TEN_Y0, TEN_Y1 = METRICS_Y1, METRICS_Y1 + TENDAY_H      # 382 - 480
+LEFT_X0 = MARGIN                    # 24
+LEFT_X1 = COLUMN_X - MARGIN         # 338
+RIGHT_X0 = RIGHT_X + MARGIN         # 389
+RIGHT_X1 = WIDTH - MARGIN           # 776
 
-PAD_X = 22          # hero and band
-PAD_X_ROW = 20      # metrics and ten-day
-HERO_GAP = 8
-BAND_GAP = 14
-METRIC_GAP = 6      # metric glyph to its value
-CELL_GAP = 4        # between metric cells
-TEN_GAP = 4
+# Right column zones. Load-bearing: an earlier revision of the spec summed
+# to 476 and silently squeezed an element, so the sum is asserted rather
+# than trusted.
+METRICS_H = 168
+NEXT_H = 160
+LATER_H = 152
+assert METRICS_H + NEXT_H + LATER_H == HEIGHT, "right column must sum to 480"
 
-# Type scale. Nothing under 19 px anywhere on the panel.
-SIZE_TEMP = 182
-SIZE_HERO_GLYPH = 132
-SIZE_HERO_GLYPH_MIN = 104
-SIZE_HILO = 52
-SIZE_BAND_GLYPH = 44
-SIZE_HEADLINE = 42
-SIZE_FIGURE = 26
-SIZE_METRIC_GLYPH = 30
-SIZE_METRIC_GLYPH_MIN = 26
-SIZE_METRIC = 33
-SIZE_TEN_GLYPH = 30
-SIZE_TEN_HIGH = 28
-SIZE_DAY = 20
-SIZE_LABEL = 19
+METRICS_Y0, METRICS_Y1 = 0, METRICS_H                       # 0   - 168
+NEXT_Y0, NEXT_Y1 = METRICS_Y1, METRICS_Y1 + NEXT_H          # 168 - 328
+LATER_Y0, LATER_Y1 = NEXT_Y1, NEXT_Y1 + LATER_H             # 328 - 480
 
-TRACK_TEMP = -0.035 * SIZE_TEMP     # letter-spacing -0.035em
-TRACK_LABEL = 0.04 * SIZE_LABEL     # letter-spacing 0.04em
+# ── Type scale ────────────────────────────────────────────────────────────────
+# Nothing under 19 px anywhere on the panel, no numeric value under 24 px,
+# no glyph under 21 px, and tracking never tighter than -0.03em.
 
-# The high/low divider: 3 px of rule with 5 px of air either side. It is the
-# only thing distinguishing the two numbers now that the labels are gone.
-HILO_RULE = 3
-HILO_RULE_MARGIN = 5
-HILO_LINE = round(SIZE_HILO * 1.05)     # the design's line-height
+SIZE_TEMP = 172
+SIZE_HERO_GLYPH = 100
+SIZE_HILO = 44          # feels-like, today's high and low
+SIZE_SLASH = 26         # the Jost 300 `/` between high and low
+SIZE_METRIC = 42
+SIZE_NEXT_GLYPH = 32
+SIZE_HEADLINE = 31
+SIZE_HOUR_TEMP = 24
+SIZE_DAY_GLYPH = 23
+SIZE_DAY_HIGH = 23
+SIZE_HOUR_GLYPH = 21
+SIZE_LABEL = 20         # floor: labels, day names, the NEXT sub-line
+SIZE_HOUR_TIME = 19     # floor
 
-# The band's right-hand figure never shrinks below its first clause: 160 px
-# holds `until 06:00` and `STALE · 18:51` at 26 px.
-FIGURE_RESERVE = 160
+# Tracking, in pixels, from the design's em values. The 0.16em on the
+# micro-labels is both a small-size legibility gain and the most
+# recognisably mid-century detail on the panel.
+TRACK_LABEL = 0.16 * SIZE_LABEL
+TRACK_DAY = 0.1 * SIZE_LABEL
+TRACK_HOUR = 0.1 * SIZE_HOUR_TIME
+TRACK_TEMP = -0.03 * SIZE_TEMP
+TRACK_HEADLINE = -0.01 * SIZE_HEADLINE
+TRACK_VALUE = -0.02        # em, applied per size to the tier-2 numerals
 
-# Pressure trend arrow, drawn after the value when the cell has room for it.
-TREND_ARROW = 14
-TREND_GAP = 5
+# ── Left column: NOW (x 0-361, full height) ───────────────────────────────────
+# padding 26 vertical / 24 horizontal, content vertically centred as one
+# block. Every box height below is the design's, so the block sums to a
+# fixed 416 and the centring cannot drift when a value changes width.
 
-# Load-bearing: an earlier revision of the spec summed to 476 and silently
-# squeezed the ten-day condition bar.
-assert HERO_H + BAND_H + METRICS_H + TENDAY_H == HEIGHT
+NOW_PAD_Y = 26
+NOW_GLYPH_BOX = 108
+NOW_TEMP_BOX = 136          # 172 px at line-height 0.78
+NOW_TEMP_GAP = 10
+NOW_RULE_ABOVE = 32
+NOW_RULE_BELOW = 22
+NOW_ROW_H = 46              # FEELS and TODAY rows
+NOW_ROW_GAP = 14
+NOW_LABEL_COL = 96          # fixed label column: values start at x=120
+NOW_SLASH_MARGIN = 10
+
+NOW_BLOCK_H = (
+    NOW_GLYPH_BOX + NOW_TEMP_GAP + NOW_TEMP_BOX
+    + NOW_RULE_ABOVE + RULE_INNER + NOW_RULE_BELOW
+    + NOW_ROW_H + NOW_ROW_GAP + NOW_ROW_H
+)
+assert NOW_BLOCK_H + 2 * NOW_PAD_Y <= HEIGHT, "left column block does not fit"
+
+# ── Right zone A: METRICS (168 px) ────────────────────────────────────────────
+# 2x2. The zone is 168 rather than smaller purely to buy the top row its
+# clearance from the panel edge — at 144 the labels sat 2 px from it.
+
+METRIC_PAD_L = 24
+METRIC_PAD_R = 14
+METRIC_LABEL_LINE = SIZE_LABEL
+METRIC_LABEL_GAP = 6
+METRIC_BLOCK_H = METRIC_LABEL_LINE + METRIC_LABEL_GAP + SIZE_METRIC   # 68
+
+# ── Right zone B: NEXT (160 px) ───────────────────────────────────────────────
+
+NEXT_PAD_TOP = 16
+NEXT_PAD_BOTTOM = 12
+NEXT_TITLE_H = 32
+NEXT_GLYPH_COL = 46
+NEXT_SUB_GAP = 6
+NEXT_SUB_H = SIZE_LABEL
+NEXT_STRIP_GAP = 10         # clearance above the strip's rule
+NEXT_HOUR_TIME_H = 20
+NEXT_HOUR_GAP = 6
+NEXT_HOUR_ROW_H = 25
+NEXT_HOUR_GLYPH_COL = 34
+NEXT_HOURS = 4
+
+# ── Right zone C: LATER (152 px) ──────────────────────────────────────────────
+
+LATER_PAD_Y = 8
+LATER_ROWS = 5
+LATER_ROW_GAP = 4
+LATER_DAY_COL = 60
+LATER_GLYPH_COL = 34
+LATER_HIGH_COL = 56
+LATER_BAR_H = 12
+LATER_BAR_PAD_R = 16
+
+LATER_ROW_H = (
+    (LATER_Y1 - LATER_Y0 - 2 * LATER_PAD_Y) - LATER_ROW_GAP * (LATER_ROWS - 1)
+) / LATER_ROWS
+assert LATER_ROW_H == 24, "forecast rows must be 24 px"
+
+LATER_BAR_X0 = RIGHT_X0 + LATER_DAY_COL + LATER_GLYPH_COL           # 483
+LATER_BAR_X1 = RIGHT_X1 - LATER_HIGH_COL - LATER_BAR_PAD_R          # 704
+LATER_BAR_MIN = 0.34        # the shortest bar is a third of the track
+LATER_BAR_SPAN = 0.66
 
 
 # ── Small helpers ─────────────────────────────────────────────────────────────
@@ -303,30 +386,45 @@ def get_font(path, size):
         return ImageFont.load_default()
 
 
-def display(size):
-    return get_font(FONT_DISPLAY, size)
+def semibold(size):
+    """Jost 600 — every numeral, and the headline."""
+    return get_font(FONT_SEMIBOLD, size)
 
 
-def text(size):
-    return get_font(FONT_TEXT, size)
+def regular(size):
+    """Jost 400 — every label and sub-line."""
+    return get_font(FONT_REGULAR, size)
 
 
-def bold(size):
-    return get_font(FONT_BOLD, size)
+def light(size):
+    """Jost 300 — the `/` between high and low, and nothing else."""
+    return get_font(FONT_LIGHT, size)
 
 
 def icon(size):
     return get_font(FONT_ICON, size)
 
 
+def fonts_loaded():
+    """True when the real TTFs are in place rather than PIL's fallback.
+
+    The width assertions below are meaningless against the default bitmap
+    font, and a missing font should not stop the panel drawing.
+    """
+    return all(
+        isinstance(get_font(path, 20), ImageFont.FreeTypeFont)
+        for path in (FONT_SEMIBOLD, FONT_REGULAR, FONT_LIGHT, FONT_ICON)
+    )
+
+
 def type_on(ink):
     """Black on every ink except blue, which is the only dark one.
 
     Black on blue measures ~2.4:1 and fails; white on blue is ~8.6:1. No
-    severity ink is blue, so the hero is always black type — this is here
-    so a future ink cannot silently break the contrast rule.
+    severity ink is blue, so the left field is always black type — this is
+    here so a future ink cannot silently break the contrast rule.
     """
-    return WHITE if ink == INK_SNOW else BLACK
+    return WHITE if ink == INK_BLUE else BLACK
 
 
 def _rounded(value, decimals):
@@ -357,75 +455,164 @@ def hhmm(epoch):
     return time.strftime("%H:%M", time.localtime(epoch))
 
 
-def glyph_advance(draw, char, size):
-    """Width actually consumed by an icon glyph.
+def sentence_case(value):
+    """First letter up, the rest down.
 
-    Weather Icons glyph advances vary by more than a factor of two, so the
-    text beside one cannot sit at a fixed offset.
+    The headline is sentence case, not caps: all-caps is reserved for the
+    tracked micro-labels, it stops the panel shouting twice, and it is what
+    makes a long alert name fit — `Snowfall warning` is 240 px in Jost 600
+    at 31 px against 497 px for the same string in caps at 42 px.
     """
-    font = icon(size)
-    box = draw.textbbox((0, 0), char, font=font, anchor="lt")
-    return max(draw.textlength(char, font=font), box[2])
+    text = " ".join((value or "").split())
+    return text[:1].upper() + text[1:].lower() if text else ""
 
 
-def tracked_width(draw, content, font, track):
-    """Width of a string drawn with letter-spacing.
+# ── Text: tracking and tabular figures ────────────────────────────────────────
 
-    PIL has no tracking, so it is applied per character and measured the
-    same way. No trailing space after the last glyph, which is what makes
-    right-aligned tracked text land where it should.
+DIGITS = "0123456789"
+
+
+@lru_cache(maxsize=128)
+def digit_advance(font):
+    """The advance every digit is drawn on, so figures are tabular.
+
+    Jost's digits differ by a third — `1` is 45 units where `0` is 60 — so
+    a value shuffles sideways as it changes, which is visible jitter and
+    needless extra e-ink repainting. This is what
+    `font-variant-numeric: tabular-nums` does in the design file. Doing it
+    here rather than through the OpenType `tnum` feature keeps it working on
+    a Pillow built without libraqm, which is the common case on a Pi.
+    """
+    return max(font.getlength(c) for c in DIGITS)
+
+
+def text_width(content, font, track=0.0):
+    """Width of a string as draw_text will lay it out.
+
+    Kerning is ignored, which makes this very slightly wide for lettered
+    strings — the fit tests below are the only callers and erring wide is
+    the right direction for them.
     """
     if not content:
         return 0.0
-    return sum(draw.textlength(c, font=font) for c in content) + track * (len(content) - 1)
+    advance = digit_advance(font)
+    total = sum(advance if c in DIGITS else font.getlength(c) for c in content)
+    return total + track * (len(content) - 1)
 
 
-def draw_tracked(draw, x, baseline, content, font, track, fill=BLACK, align="left"):
+def hard_text(draw, xy, content, font, fill):
+    """Draw one run of text with no anti-aliased pixels.
+
+    PIL anti-aliases text, and with DITHER_NONE every grey edge pixel lands
+    on whichever of the seven inks is nearest in RGB. Mid-grey is nearest to
+    orange, and a black-on-yellow edge blend is nearest to red — so type on
+    a severity field picks up a coloured fringe that is very visible at
+    172 px. Type here is only ever black or white, so the coverage mask is
+    thresholded and the fill painted through it. The result is a hard edge,
+    which is the correct rendering for a panel with seven flat inks and no
+    dithering.
+    """
+    box = draw.textbbox(xy, content, font=font, anchor="ls")
+    left, top = int(box[0]) - 1, int(box[1]) - 1
+    size = (int(box[2]) - left + 2, int(box[3]) - top + 2)
+    if size[0] <= 0 or size[1] <= 0:
+        return
+    mask = Image.new("L", size, 0)
+    ImageDraw.Draw(mask).text(
+        (xy[0] - left, xy[1] - top), content, font=font, fill=255, anchor="ls",
+    )
+    draw.bitmap((left, top), mask.point(lambda v: 255 if v >= 128 else 0), fill=fill)
+
+
+def draw_text(draw, x, baseline, content, font, track=0.0, fill=BLACK, align="left"):
+    """Draw one line on a baseline, with letter-spacing and tabular figures.
+
+    PIL has no tracking and no `tnum`, so both are applied by hand. Digits
+    are placed one at a time, centred in the tabular advance; runs of
+    anything else are drawn whole when there is no tracking, so the face's
+    kerning survives in the headline and the sub-line.
+
+    `stroke_width` is never passed. The old faces used a stroke to fake a
+    bold weight, which grows glyphs outward and closes the counters of 8, 6
+    and 0; Jost 600 is an actual weight and needs none.
+    """
     if not content:
         return
     if align == "right":
-        x -= tracked_width(draw, content, font, track)
+        x -= text_width(content, font, track)
+    advance = digit_advance(font)
+    run = ""
+
+    def flush(x):
+        if run:
+            hard_text(draw, (x, baseline), run, font, fill)
+            x += font.getlength(run)
+        return x
+
     for char in content:
-        draw.text((x, baseline), char, font=font, fill=fill, anchor="ls")
-        x += draw.textlength(char, font=font) + track
+        if char in DIGITS:
+            x = flush(x)
+            run = ""
+            natural = font.getlength(char)
+            hard_text(draw, (x + (advance - natural) / 2, baseline), char, font, fill)
+            x += advance + track
+        elif track:
+            x = flush(x)
+            run = ""
+            hard_text(draw, (x, baseline), char, font, fill)
+            x += font.getlength(char) + track
+        else:
+            run += char
+    flush(x)
 
 
-def baseline_for(draw, content, font, centre_y):
-    """Baseline that centres a string on its own ink, not on its metrics.
+def baseline_for(draw, ref, font, centre_y):
+    """Baseline that centres `ref`'s ink on centre_y.
 
     PIL's "m" anchor centres between ascender and descender, which sits
-    digits visibly low because they have no descender. The design's
-    line-height 0.8 is doing the same job in CSS.
+    digits visibly low because they have no descender — the design's
+    line-heights are doing the same job in CSS. `ref` is deliberately a
+    reference string rather than the content: passing "0" keeps a numeric
+    row on one baseline whatever the value is, which is what stops the
+    panel repainting ink that did not need to move.
     """
-    if not content:
+    if not ref:
         return centre_y
-    box = draw.textbbox((0, 0), content, font=font, anchor="ls")
+    box = draw.textbbox((0, 0), ref, font=font, anchor="ls")
     return centre_y - (box[1] + box[3]) / 2
 
 
-def draw_centred(draw, x, centre_y, content, font, fill=BLACK, anchor_x="l"):
-    """Draw a string horizontally at x, vertically centred on its ink."""
+def draw_row(draw, x, centre_y, content, font, track=0.0, fill=BLACK,
+             align="left", ref="0"):
+    """Draw a line centred vertically on centre_y."""
     if not content:
         return
-    baseline = baseline_for(draw, content, font, centre_y)
-    draw.text((x, baseline), content, font=font, fill=fill, anchor=f"{anchor_x}s")
+    draw_text(
+        draw, x, baseline_for(draw, ref, font, centre_y),
+        content, font, track, fill=fill, align=align,
+    )
 
 
-def draw_trend_arrow(draw, x, y, size, trend, fill=BLACK):
-    """Pressure trend as a drawn triangle.
+def draw_glyph(draw, x, centre_y, glyph, size, fill=BLACK):
+    """Draw an icon glyph left-aligned at x, centred on its own ink.
 
-    None of the shipped faces contain U+2197/U+2198, so an arrow character
-    renders as .notdef. A solid triangle needs no font and stays crisp
-    through the 7-colour quantiser.
+    Weather Icons advances vary by more than a factor of two, so a glyph is
+    centred on itself rather than on a shared reference.
     """
-    half = size / 2
-    if trend == "rising":
-        points = [(x + half, y - half), (x + size, y + half), (x, y + half)]
-    elif trend == "falling":
-        points = [(x, y - half), (x + size, y - half), (x + half, y + half)]
-    else:
-        points = [(x, y - half), (x + size, y), (x, y + half)]
-    draw.polygon(points, fill=fill)
+    if not glyph:
+        return
+    font = icon(size)
+    draw_text(draw, x, baseline_for(draw, glyph, font, centre_y), glyph, font, fill=fill)
+
+
+def temp_band_ink(value):
+    """Absolute temperature to its ink. Divergent, white in the middle."""
+    if value is None:
+        return WHITE
+    for ceiling, ink in TEMP_BANDS:
+        if ceiling is None or value < ceiling:
+            return ink
+    return INK_RED
 
 
 def is_night(weather):
@@ -434,27 +621,6 @@ def is_night(weather):
     if not sunrise or not sunset:
         return False
     return now < sunrise or now > sunset
-
-
-def condition_category(icon_name, high=None):
-    """Map the API icon string to one of six categories.
-
-    `hot` overrides when the daily high exceeds 28 C.
-    """
-    if high is not None and high > 28:
-        return "hot"
-    name = (icon_name or "").lower()
-    if "thunder" in name or "storm" in name:
-        return "storm"
-    if "snow" in name or "wintry" in name:
-        return "snow"
-    if any(k in name for k in ("rain", "drizzle", "sleet", "hail")):
-        return "rain"
-    if any(k in name for k in ("cloud", "overcast", "fog", "haze", "mist", "smoke", "dust")):
-        return "cloud"
-    if "clear" in name:
-        return "clear"
-    return "cloud"
 
 
 def condition_glyph(icon_name, night=False):
@@ -489,7 +655,7 @@ def alert_glyph(event):
         return WI["snow"]
     if any(k in name for k in ("freezing", "frost", "cold", "wind chill", "ice")):
         return WI["snowflake"]
-    if any(k in name for k in ("thunder", "tornado", "hurricane", "tropical")):
+    if any(k in name for k in ("thunder", "storm", "tornado", "hurricane", "tropical")):
         return WI["thunderstorm"]
     if any(k in name for k in ("rain", "flood", "rainfall")):
         return WI["rain"]
@@ -730,7 +896,7 @@ def _alert_ca(session, lat, lon, area):
         kind = (props.get("alert_type") or "").strip().lower()
         alerts.append({
             "severity": kind if kind in SEVERITY_RANK else "advisory",
-            "event": (props.get("alert_name_en") or "alert").upper(),
+            "event": props.get("alert_name_en") or "Alert",
             "expires": parse_iso(props.get("expiration_datetime")),
             "area": props.get("feature_name_en") or "",
         })
@@ -754,7 +920,7 @@ def _alert_us(session, lat, lon, area):
             continue
         alerts.append({
             "severity": cap_severity(props.get("severity")),
-            "event": (props.get("event") or "alert").upper(),
+            "event": props.get("event") or "Alert",
             "expires": parse_iso(props.get("ends") or props.get("expires")),
             "area": props.get("areaDesc") or "",
         })
@@ -827,7 +993,7 @@ def _alert_uk(session, lat, lon, area):
         colour, hazard, where = match.groups()
         alerts.append({
             "severity": UK_COLOUR_SEVERITY.get(colour.lower(), "advisory"),
-            "event": f"{hazard.strip()} warning".upper(),
+            "event": f"{hazard.strip()} warning",
             "expires": _uk_expiry(item.findtext("description") or ""),
             "area": (where or "").strip(),
         })
@@ -978,7 +1144,7 @@ def fetch_weather(retries=3):
             if not daily:
                 raise ValueError("Empty daily forecast")
 
-            # All ten days, not five — the ten-day row needs them.
+            # Five days: that is what the LATER zone draws.
             forecast_daily = [
                 {
                     "day": time.strftime(
@@ -990,7 +1156,7 @@ def fetch_weather(retries=3):
                     "conditions": day.get("conditions", ""),
                     "precip_prob": _num(day.get("precip_probability")),
                 }
-                for day in daily[:10]
+                for day in daily[:5]
             ]
 
             forecast_hourly = [
@@ -999,6 +1165,7 @@ def fetch_weather(retries=3):
                     "prob": _num(hour.get("precip_probability")),
                     "type": hour.get("precip_type"),
                     "temp": _num(hour.get("air_temperature")),
+                    "icon": hour.get("icon"),
                 }
                 for hour in hourly[:24]
             ]
@@ -1100,48 +1267,58 @@ def fetch_all():
     return weather
 
 
-# ── Headline selection ────────────────────────────────────────────────────────
+# ── The NEXT zone's content ───────────────────────────────────────────────────
 
 def select_concern(weather):
     """Highest-priority *active* concern, held for as long as it is active.
 
-    Deliberately not a round-robin: at a 15-minute cadence a rotation shows
-    any given item for 15 minutes in every 75, so you can walk up wanting
-    the wind and have to wait. Nothing here rotates at all.
+    Deliberately not a round-robin: at a 15-minute cadence a five-item
+    rotation shows any given item for 15 minutes in every 75, so you can
+    walk up wanting the wind and have to wait. Nothing here rotates.
+
+    Returns a headline in sentence case and a list of sub-line clauses in
+    priority order — draw_next drops them from the end until the line fits,
+    so the clause that matters most is always the one that survives.
     """
     now = weather.get("obs_time") or time.time()
+    exact = weather.get("temp")
+    # The hero rounds to whole degrees, so the exact reading lives here.
+    exact_clause = f"{exact:.1f}°" if exact is not None else None
 
-    # 1. Official alert. Also fills the hero beacon.
+    # 1. Official alert. Also lights the beacon.
     alert = weather.get("alert")
     if alert:
-        figure = f"until {hhmm(alert.get('expires'))}" if alert.get("expires") else ""
-        exact = weather.get("temp")
-        if exact is not None:
-            figure = f"{figure} {MIDDOT} {exact:.1f}°" if figure else f"{exact:.1f}°"
+        clauses = []
+        if alert.get("expires"):
+            clauses.append(f"until {hhmm(alert['expires'])}")
+        if exact_clause:
+            clauses.append(exact_clause)
+        if alert.get("area"):
+            clauses.append(str(alert["area"]).lower())
         return {
             "glyph": alert_glyph(alert.get("event")),
-            "headline": (alert.get("event") or "WEATHER ALERT").upper(),
-            "figure": figure,
+            "headline": sentence_case(alert.get("event") or "Weather alert"),
+            "clauses": clauses,
         }
 
-    # 2. Station health.
+    # 2. Station health. No ambient state: it appears here or not at all.
     obs_time = weather.get("obs_time")
     if obs_time and (time.time() - obs_time) > STATION_SILENT_SECONDS:
         silent_for = int((time.time() - obs_time) / 60)
         return {
             "glyph": WI["na"],
-            "headline": "STATION SILENT",
-            "figure": f"last {hhmm(obs_time)} {MIDDOT} {silent_for} min",
+            "headline": "Station silent",
+            "clauses": [f"last {hhmm(obs_time)}", f"{silent_for} min ago"],
         }
     battery = weather.get("battery")
     if battery is not None and battery < BATTERY_LOW_VOLTS:
         return {
             "glyph": WI["na"],
-            "headline": "BATTERY LOW",
-            "figure": f"{battery:.2f} V",
+            "headline": "Battery low",
+            "clauses": [f"{battery:.2f} V", exact_clause],
         }
 
-    # 3. Lightning.
+    # 3. Lightning inside 15 km in the last 30 minutes.
     strike_epoch = weather.get("lightning_epoch")
     strike_km = weather.get("lightning_distance")
     if (
@@ -1151,53 +1328,55 @@ def select_concern(weather):
         and strike_km <= LIGHTNING_NEAR_KM
     ):
         count = weather.get("lightning_count")
-        figure = hhmm(strike_epoch)
+        clauses = [f"nearest strike {strike_km:.0f} km", hhmm(strike_epoch)]
         if count:
-            figure = f"{int(count)} strikes {MIDDOT} {figure}"
+            clauses.append(f"{int(count)} strikes")
         return {
             "glyph": WI["lightning"],
-            "headline": f"LIGHTNING {strike_km:.0f} KM",
-            "figure": figure,
+            "headline": f"Lightning {strike_km:.0f} km",
+            "clauses": clauses,
         }
 
-    # 4. Precipitation starting or stopping within 3 h.
+    # 4. Precipitation starting or stopping within three hours.
     transition = precip_transition(weather)
     if transition:
         return transition
 
-    # 5. Gust above threshold.
+    # 5. Gust above the threshold.
     gust = weather.get("wind_gust")
     if gust is not None and gust >= GUST_THRESHOLD_KPH:
         direction = get_wind_direction(weather.get("wind_dir"))
         return {
             "glyph": WI["wind"],
-            "headline": f"GUSTS {gust:.0f} KM/H",
-            "figure": f"{direction} {MIDDOT} avg {fmt_num(weather.get('wind_avg'), 0)}",
+            "headline": f"Gusts {gust:.0f} km/h",
+            "clauses": [
+                f"{direction} · avg {fmt_num(weather.get('wind_avg'), 0)}",
+                exact_clause,
+            ],
         }
 
-    # 6. Frost crossing.
-    temp = weather.get("temp")
+    # 6. Frost crossing — air temperature or dew point through 0 C.
     dew = weather.get("dew_point")
     low = weather.get("today_low")
-    if any(v is not None and v <= 0 for v in (temp, dew, low)):
+    if any(v is not None and v <= 0 for v in (exact, dew, low)):
         return {
             "glyph": WI["snowflake"],
-            "headline": "FROST",
-            "figure": f"low {fmt_temp(low)} {MIDDOT} dew {fmt_temp(dew)}",
+            "headline": "Frost",
+            "clauses": [f"low {fmt_temp(low)}", f"dew {fmt_temp(dew)}", exact_clause],
         }
 
     # 7. Nothing active.
-    summary = (weather.get("today_conditions") or "").strip().lower()
-    exact = weather.get("temp")
-    parts = []
-    if summary:
-        parts.append(summary)
-    if exact is not None:
-        parts.append(f"{exact:.1f}° exactly")
+    trend = weather.get("pressure_trend")
+    clauses = [
+        (weather.get("today_conditions") or "").strip().lower() or None,
+        exact_clause,
+        f"dew {fmt_temp(dew)}" if dew is not None else None,
+        f"pressure {trend}" if trend in ("rising", "falling") else None,
+    ]
     return {
         "glyph": condition_glyph(day_icon(weather)),
-        "headline": "ALL CLEAR TODAY",
-        "figure": f" {MIDDOT} ".join(parts),
+        "headline": "All clear today",
+        "clauses": clauses,
     }
 
 
@@ -1209,7 +1388,11 @@ def day_icon(weather):
 
 
 def precip_transition(weather):
-    """Precipitation starting or stopping inside the next three hours."""
+    """Precipitation starting or stopping inside the next three hours.
+
+    Times are printed absolutely. The panel is up to 15 minutes stale, so
+    "in 3h 25m" is wrong for 14 of every 15 minutes; `18:00` never is.
+    """
     hours = [h for h in weather.get("hourly", [])[:4] if h.get("prob") is not None]
     if len(hours) < 2:
         return None
@@ -1220,32 +1403,48 @@ def precip_transition(weather):
         if hour.get("type"):
             kind = str(hour["type"]).lower()
             break
-    is_snow = kind == "snow"
-    word = "SNOW" if is_snow else "RAIN"
-    glyph = WI["snow"] if is_snow else WI["rain"]
+    stormy = any("thunder" in str(h.get("icon") or "").lower() for h in hours)
+
+    if stormy:
+        word, glyph = "Storm", WI["thunderstorm"]
+    elif kind == "snow":
+        word, glyph = "Snow", WI["snow"]
+    elif kind == "sleet":
+        word, glyph = "Sleet", WI["sleet"]
+    else:
+        word, glyph = "Rain", WI["rain"]
+
+    exact = weather.get("temp")
+
+    def clauses(hour):
+        rain = weather.get("rain_today")
+        return [
+            f"{int(hour['prob'])}% chance",
+            f"{exact:.1f}°" if exact is not None else None,
+            f"{fmt_num(rain, 1)} mm so far" if rain is not None else None,
+        ]
 
     for i in range(1, len(wet)):
         if wet[i] and not wet[i - 1]:
             hour = hours[i]
             return {
                 "glyph": glyph,
-                "headline": f"{word} FROM {hhmm(hour['time'])}",
-                "figure": f"{int(hour['prob'])}%",
+                "headline": f"{word} from {hhmm(hour['time'])}",
+                "clauses": clauses(hour),
             }
         if wet[i - 1] and not wet[i]:
             hour = hours[i]
             return {
                 "glyph": glyph,
-                "headline": f"{word} STOPS {hhmm(hour['time'])}",
-                "figure": f"{int(hours[i-1]['prob'])}% now",
+                "headline": f"{word} until {hhmm(hour['time'])}",
+                "clauses": clauses(hours[i - 1]),
             }
 
     if wet and wet[0]:
-        hour = hours[0]
         return {
             "glyph": glyph,
-            "headline": f"{word} NOW",
-            "figure": f"{int(hour['prob'])}%",
+            "headline": f"{word} now",
+            "clauses": clauses(hours[0]),
         }
     return None
 
@@ -1254,230 +1453,174 @@ def precip_transition(weather):
 
 # Official event names that no generic rule shortens well.
 EVENT_ALIASES = {
-    "SPECIAL WEATHER STATEMENT": "WEATHER STATEMENT",
-    "SEVERE THUNDERSTORM": "T-STORM",
+    "special weather statement": "Weather statement",
+    "severe thunderstorm": "Thunderstorm",
 }
 WORD_ABBREVIATIONS = {
-    "THUNDERSTORM": "T-STORM",
-    "PRECIPITATION": "PRECIP",
-    "TEMPERATURE": "TEMP",
-    "KILOMETRE": "KM",
+    "precipitation": "precip",
+    "temperature": "temp",
+    "kilometre": "km",
 }
-LEVEL_WORDS = ("WARNING", "WATCH", "ADVISORY", "STATEMENT")
+LEVEL_WORDS = ("warning", "watch", "advisory", "statement")
 
 
-def shorten_headline(draw, headline, font, max_width):
+def shorten_headline(draw, headline, font, max_width, track=0.0):
     """Make the headline fit on one line without shrinking the type.
 
     The type size comes from a legibility budget, so when a string is too
     long the copy gives way and never the size. In order: the name as
     issued, then known abbreviations, then the hazard without its level
-    word (the beacon is already carrying the level), then the last two
-    words, then the level alone, then a truncation.
+    word — the field behind it is already carrying the level — then the
+    last two words, then the last word, then a truncation.
 
-    Dropping the level rather than the hazard is deliberate — `FREEZING
-    RAIN` tells you more than `RAIN WARNING`, and the field behind it is
-    already red.
+    Dropping the level rather than the hazard is deliberate: `Freezing
+    rain` tells you more than `Rain warning`, and the panel is already red.
     """
-    short = headline
+    short = sentence_case(headline)
     for long_form, replacement in EVENT_ALIASES.items():
-        short = short.replace(long_form, replacement)
-    short = " ".join(WORD_ABBREVIATIONS.get(w, w) for w in short.split())
+        if long_form in short.lower():
+            short = sentence_case(
+                re.sub(long_form, replacement, short, flags=re.IGNORECASE)
+            )
+    short = sentence_case(
+        " ".join(WORD_ABBREVIATIONS.get(w.lower(), w) for w in short.split())
+    )
 
-    candidates = [headline, short]
+    candidates = [sentence_case(headline), short]
     words = short.split()
     for level in LEVEL_WORDS:
-        # Only when something meaningful is left: "WEATHER STATEMENT"
-        # collapsing to "WEATHER" would say nothing at all.
-        if short.endswith(f" {level}") and len(words) > 2:
-            candidates.append(" ".join(words[:-1]))
+        # Only when something meaningful is left: "Weather statement"
+        # collapsing to "Weather" would say nothing at all.
+        if short.lower().endswith(f" {level}") and len(words) > 2:
+            candidates.append(sentence_case(" ".join(words[:-1])))
     if len(words) > 2:
-        candidates.append(" ".join(words[-2:]))
+        candidates.append(sentence_case(" ".join(words[-2:])))
     if len(words) > 1:
-        candidates.append(words[-1])
+        candidates.append(sentence_case(words[-1]))
 
     for candidate in candidates:
-        if candidate and draw.textlength(candidate, font=font) <= max_width:
+        if candidate and text_width(candidate, font, track) <= max_width:
             return candidate
 
     trimmed = candidates[-1]
-    while trimmed and draw.textlength(trimmed + DASH, font=font) > max_width:
+    while trimmed and text_width(trimmed + DASH, font, track) > max_width:
         trimmed = trimmed[:-1]
     return (trimmed.rstrip() + DASH) if trimmed else DASH
 
 
-def fit_figure(draw, figure, font, max_width):
-    """Drop the figure's trailing clauses until it fits its right-hand slot."""
-    parts = [p.strip() for p in (figure or "").split(MIDDOT) if p.strip()]
+def fit_clauses(clauses, font, max_width, track=0.0):
+    """Drop trailing clauses until the sub-line fits its zone."""
+    parts = [str(c).strip() for c in clauses if c]
     while parts:
         candidate = f" {MIDDOT} ".join(parts)
-        if draw.textlength(candidate, font=font) <= max_width:
+        if text_width(candidate, font, track) <= max_width:
             return candidate
         parts.pop()
     return ""
 
 
-# ── Region 1: hero (y 0-210) ──────────────────────────────────────────────────
-
-def hero_glyph_size(draw, glyph, temp_str, column_width):
-    """132 px unless the row would overflow, then as much as fits.
-
-    Weather Icons advances vary by more than a factor of two at a given
-    size, so the composite day-rain and partly-cloudy glyphs beside a
-    four-character temperature can overflow the row. Type sizes never move,
-    so the glyph gives way — a 110 px silhouette still reads at 4.5 m.
-    """
-    # Two gaps: glyph to temperature, and temperature to the high/low column.
-    available = WIDTH - 2 * PAD_X - column_width - 2 * HERO_GAP
-    available -= tracked_width(draw, temp_str, display(SIZE_TEMP), TRACK_TEMP)
-    size = SIZE_HERO_GLYPH
-    while size > SIZE_HERO_GLYPH_MIN and glyph_advance(draw, glyph, size) > available:
-        size -= 2
-    return size
+def next_hours(weather, count=NEXT_HOURS):
+    """The next `count` whole hours, skipping the one already in progress."""
+    now = weather.get("obs_time") or time.time()
+    upcoming = [
+        h for h in weather.get("hourly", [])
+        if h.get("time") and h["time"] > now
+    ]
+    return upcoming[:count]
 
 
-def draw_hero(draw, weather):
-    """Glyph, temperature and today's range, on the alert severity field.
+# ── Left column: NOW (x 0-361, full height) ───────────────────────────────────
 
-    The field is the beacon: a full-bleed 800x206 area of ink has no
-    legibility threshold at all, so it stays detectable in peripheral vision
-    where no type can. It is also the heaviest possible e-ink refresh, and
-    red is among the slowest inks — so it fires only for an official alert,
-    never for ordinary conditions.
+def draw_now(draw, weather):
+    """Condition glyph, temperature and today's range, on the severity field.
+
+    The field is the beacon: a 362x480 area of ink has no legibility
+    threshold at all, so it stays detectable in peripheral vision where no
+    type can. It is also the heaviest possible e-ink refresh and red is
+    among the slowest inks, so it fires only for an official alert and
+    never for ordinary conditions — a beacon that lights on every wet day
+    means nothing.
     """
     alert = weather.get("alert")
     ink = SEVERITY_INK.get((alert or {}).get("severity"), WHITE)
     fg = type_on(ink)
 
-    content_bottom = HERO_Y1 - RULE
     if ink != WHITE:
-        draw.rectangle([0, HERO_Y0, WIDTH - 1, content_bottom - 1], fill=ink)
-    draw.rectangle([0, content_bottom, WIDTH - 1, HERO_Y1 - 1], fill=BLACK)
+        draw.rectangle([0, 0, COLUMN_X - 1, HEIGHT - 1], fill=ink)
+    draw.rectangle([COLUMN_X, 0, COLUMN_X + RULE_ZONE - 1, HEIGHT - 1], fill=BLACK)
 
-    centre_y = (HERO_Y0 + content_bottom) / 2
-    right = WIDTH - PAD_X
-
-    # Right-hand high/low column, measured first because the hero row is
-    # sized around it. No HIGH/LOW labels: the upper number is the high, the
-    # lower one is the low, and the divider says so. Bigger, and less to read.
-    value_font = display(SIZE_HILO)
-    high_str = fmt_temp(weather.get("today_high"))
-    low_str = fmt_temp(weather.get("today_low"))
-    column_width = max(
-        draw.textlength(high_str, font=value_font),
-        draw.textlength(low_str, font=value_font),
-    )
-
-    # 55 + 5 + 3 + 5 + 55, centred on the region.
-    column_height = 2 * HILO_LINE + 2 * HILO_RULE_MARGIN + HILO_RULE
-    y = centre_y - column_height / 2
-    draw_centred(
-        draw, right, y + HILO_LINE / 2, high_str, value_font, fill=fg, anchor_x="r",
-    )
-    y += HILO_LINE + HILO_RULE_MARGIN
-    rule_left = round(right - column_width)
-    draw.rectangle(
-        [rule_left, round(y), right - 1, round(y) + HILO_RULE - 1], fill=fg,
-    )
-    y += HILO_RULE + HILO_RULE_MARGIN
-    draw_centred(
-        draw, right, y + HILO_LINE / 2, low_str, value_font, fill=fg, anchor_x="r",
-    )
-
-    # Temperature: whole degrees only. 22 degrees, not 21.8 — dropping the
-    # decimal is 35 % narrower, which is what funds the size. The exact
-    # value is in the band, read at walk-up; nobody decides anything on
-    # 0.8 C from a sofa.
-    temp = weather.get("temp")
-    temp_font = display(SIZE_TEMP)
-    if temp is None:
-        # An em dash at 182 px is a solid black slab that reads as a
-        # redaction rather than as a missing reading, so the no-data mark
-        # drops to the tier-2 size on the same baseline.
-        temp_str, temp_font, track = DASH, display(SIZE_HILO), 0.0
-    else:
-        temp_str, track = fmt_temp(temp), TRACK_TEMP
+    # The block is a fixed 416 px tall whatever the values are, so nothing
+    # below it moves when a digit is added.
+    y = NOW_PAD_Y + (HEIGHT - 2 * NOW_PAD_Y - NOW_BLOCK_H) / 2
 
     glyph = condition_glyph(weather.get("icon_name"), is_night(weather))
-    glyph_size = hero_glyph_size(draw, glyph, temp_str if temp is not None else "", column_width)
+    draw_glyph(draw, LEFT_X0, y + NOW_GLYPH_BOX / 2, glyph, SIZE_HERO_GLYPH, fill=fg)
+    y += NOW_GLYPH_BOX + NOW_TEMP_GAP
 
-    x = PAD_X
-    draw_centred(draw, x, centre_y, glyph, icon(glyph_size), fill=fg)
-    x += glyph_advance(draw, glyph, glyph_size) + HERO_GAP
-    draw_tracked(
-        draw, x, baseline_for(draw, temp_str, temp_font, centre_y),
-        temp_str, temp_font, track, fill=fg,
-    )
-
-
-# ── Region 2: headline band (y 210-290) ───────────────────────────────────────
-
-def draw_band(draw, weather):
-    """One line: what is happening, and the figure that qualifies it.
-
-    White ground: the colour channel belongs to the hero
-    field, and a second coloured region would put severity and condition ink
-    side by side.
-    """
-    content_bottom = BAND_Y1 - RULE
-    draw.rectangle([0, content_bottom, WIDTH - 1, BAND_Y1 - 1], fill=BLACK)
-
-    concern = select_concern(weather)
-    centre_y = (BAND_Y0 + content_bottom) / 2
-    right = WIDTH - PAD_X
-
-    x = PAD_X
-    glyph = concern["glyph"]
-    draw_centred(draw, x, centre_y, glyph, icon(SIZE_BAND_GLYPH))
-    x += glyph_advance(draw, glyph, SIZE_BAND_GLYPH) + BAND_GAP
-
-    if weather.get("stale"):
-        figure = f"STALE {MIDDOT} {hhmm(weather.get('fetched_at'))}"
+    # Whole degrees: 22°, not 21.8°. Dropping the decimal is ~35 % narrower,
+    # which is what funds 172 px. The exact value is on the NEXT sub-line,
+    # read at walk-up — nobody decides anything on 0.8 C from a sofa.
+    temp = weather.get("temp")
+    if temp is None:
+        # An em dash at 172 px is a solid slab that reads as a redaction
+        # rather than as a missing reading, so the no-data mark drops to the
+        # tier-2 size on the same baseline.
+        temp_str, temp_font, track = DASH, semibold(SIZE_HILO), 0.0
     else:
-        figure = concern.get("figure") or ""
+        temp_str, temp_font, track = fmt_temp(temp), semibold(SIZE_TEMP), TRACK_TEMP
+    draw_row(
+        draw, LEFT_X0, y + NOW_TEMP_BOX / 2, temp_str, temp_font, track,
+        fill=fg, ref="0",
+    )
+    y += NOW_TEMP_BOX + NOW_RULE_ABOVE
 
-    # The headline is measured first and the figure takes what is left. The
-    # copy is authored to fit at 42 px, and the figure is the element built
-    # to give way — fit_figure drops its trailing clauses one at a time, so
-    # `until 04:01 · -8.6°` becomes `until 04:01` rather than the headline
-    # collapsing to `WARNING`. FIGURE_RESERVE keeps the first clause alive
-    # even against a headline that wants the whole band.
-    figure_font = bold(SIZE_FIGURE)
-    figure_width = draw.textlength(figure, font=figure_font) if figure else 0
-    reserved = min(figure_width, FIGURE_RESERVE) + BAND_GAP if figure else 0
+    draw.rectangle(
+        [LEFT_X0, round(y), LEFT_X1 - 1, round(y) + RULE_INNER - 1], fill=fg,
+    )
+    y += RULE_INNER + NOW_RULE_BELOW
 
-    headline_font = display(SIZE_HEADLINE)
-    headline = shorten_headline(draw, concern["headline"], headline_font, right - x - reserved)
-    draw_centred(draw, x, centre_y, headline, headline_font)
+    # Two rows on fixed label columns, each label sharing its value's real
+    # baseline — the values start on the same vertical at x=120.
+    value_font = semibold(SIZE_HILO)
+    label_font = regular(SIZE_LABEL)
+    track_value = TRACK_VALUE * SIZE_HILO
+    value_x = LEFT_X0 + NOW_LABEL_COL
 
-    if figure:
-        used = draw.textlength(headline, font=headline_font)
-        figure = fit_figure(draw, figure, figure_font, right - x - used - BAND_GAP)
-        if figure:
-            draw_centred(draw, right, centre_y, figure, figure_font, anchor_x="r")
+    baseline = baseline_for(draw, "0", value_font, y + NOW_ROW_H / 2)
+    draw_text(draw, LEFT_X0, baseline, "FEELS", label_font, TRACK_LABEL, fill=fg)
+    draw_text(
+        draw, value_x, baseline, fmt_temp(weather.get("feels_like")),
+        value_font, track_value, fill=fg,
+    )
+    y += NOW_ROW_H + NOW_ROW_GAP
+
+    baseline = baseline_for(draw, "0", value_font, y + NOW_ROW_H / 2)
+    draw_text(draw, LEFT_X0, baseline, "TODAY", label_font, TRACK_LABEL, fill=fg)
+    high = fmt_temp(weather.get("today_high"))
+    low = fmt_temp(weather.get("today_low"))
+    x = value_x
+    draw_text(draw, x, baseline, high, value_font, track_value, fill=fg)
+    x += text_width(high, value_font, track_value) + NOW_SLASH_MARGIN
+    slash_font = light(SIZE_SLASH)
+    draw_text(draw, x, baseline, "/", slash_font, fill=fg)
+    x += slash_font.getlength("/") + NOW_SLASH_MARGIN
+    draw_text(draw, x, baseline, low, value_font, track_value, fill=fg)
 
 
-# ── Region 3: metrics row (y 290-382) ────────────────────────────────────────
+# ── Right zone A: METRICS (y 0-168) ───────────────────────────────────────────
 
 def metric_values(weather):
-    """The five metrics and their order are fixed forever.
+    """The four metrics and their order are fixed forever.
 
     That is what guarantees nothing is ever missing: the number you want is
     always in the position you last found it. A metric with no data renders
     an em dash — it does not vanish and it is not reordered.
 
-    Units live in the label, never in the value. A cell is only ~149 px
-    wide at 33 px, and `1021` beside `13h56` collides otherwise.
-
-    Lightning has no metric: it is an event, not a standing value, so it
-    appears in the headline band at priority 3 and nowhere else.
+    Units live in the label, never in the value. A cell is only ~217 px
+    wide and `1021 hPa` beside `13h 56m` collides; that was measured, not
+    preferred.
     """
-    dew = weather.get("dew_point")
-    rain = weather.get("rain_today")
-    wind = weather.get("wind_avg")
-    pressure = weather.get("pressure")
     sunrise, sunset = weather.get("sunrise"), weather.get("sunset")
-
     if sunrise and sunset and sunset > sunrise:
         total = int(sunset - sunrise)
         daylight = f"{total // 3600}h{(total % 3600) // 60:02d}"
@@ -1485,134 +1628,179 @@ def metric_values(weather):
         daylight = DASH
 
     return [
-        {"label": "DEW °C", "glyph": WI["snowflake"], "value": fmt_num(dew, 0)},
-        {"label": "RAIN mm", "glyph": WI["raindrop"], "value": fmt_num(rain, 1)},
-        {"label": "WIND km/h", "glyph": WI["wind"], "value": fmt_num(wind, 0)},
-        {
-            "label": "PRESS hPa",
-            "glyph": WI["barometer"],
-            "value": fmt_num(pressure, 0),
-            "trend": weather.get("pressure_trend", "steady") if pressure is not None else None,
-        },
-        {"label": "DAYLIGHT", "glyph": WI["sunrise"], "value": daylight},
+        {"label": "WIND KM/H", "value": fmt_num(weather.get("wind_avg"), 0)},
+        {"label": "RAIN MM", "value": fmt_num(weather.get("rain_today"), 1)},
+        {"label": "PRESSURE", "value": fmt_num(weather.get("pressure"), 0)},
+        {"label": "DAYLIGHT", "value": daylight},
     ]
 
 
-# 19 px at the design's 1.1 line-height, a 3 px gap, then the glyph and the
-# value sharing a 33 px line.
-METRIC_LABEL_LINE = 21
-METRIC_LABEL_GAP = 3
-
-
 def draw_metrics(draw, weather):
-    """Five equal cells: label over glyph-and-value, each centred in its cell.
+    """2x2, left-aligned, with 2 px dividers between the cells.
 
-    The label is back in 7A, and it carries the unit — which is what lets
-    the value be 33 px instead of 24 px in the same width.
+    The content is 68 px tall in an ~82 px cell, and that clearance is the
+    whole reason the zone is 168 px rather than smaller: the top row sits
+    against the panel edge. At 42 px rather than 46 the values gained 8 px
+    of air and read larger for it.
     """
-    content_bottom = METRICS_Y1 - RULE
-    draw.rectangle([0, content_bottom, WIDTH - 1, METRICS_Y1 - 1], fill=BLACK)
+    zone_bottom = METRICS_Y1 - RULE_ZONE
+    draw.rectangle([RIGHT_X, zone_bottom, WIDTH - 1, METRICS_Y1 - 1], fill=BLACK)
 
-    cell_w = (WIDTH - 2 * PAD_X_ROW - CELL_GAP * 4) / 5
-    label_font = text(SIZE_LABEL)
-    value_font = display(SIZE_METRIC)
+    divider_x = round((RIGHT_X + WIDTH) / 2 - RULE_INNER / 2)
+    divider_y = round((METRICS_Y0 + zone_bottom) / 2 - RULE_INNER / 2)
+    draw.rectangle(
+        [divider_x, METRICS_Y0, divider_x + RULE_INNER - 1, zone_bottom - 1], fill=BLACK,
+    )
+    draw.rectangle(
+        [RIGHT_X, divider_y, WIDTH - 1, divider_y + RULE_INNER - 1], fill=BLACK,
+    )
 
-    block_h = METRIC_LABEL_LINE + METRIC_LABEL_GAP + SIZE_METRIC
-    top = METRICS_Y0 + (content_bottom - METRICS_Y0 - block_h) / 2
-    label_centre = top + METRIC_LABEL_LINE / 2
-    row_centre = top + METRIC_LABEL_LINE + METRIC_LABEL_GAP + SIZE_METRIC / 2
+    columns = [RIGHT_X, divider_x + RULE_INNER]
+    rows = [(METRICS_Y0, divider_y), (divider_y + RULE_INNER, zone_bottom)]
+
+    label_font = regular(SIZE_LABEL)
+    value_font = semibold(SIZE_METRIC)
+    track_value = TRACK_VALUE * SIZE_METRIC
 
     for i, metric in enumerate(metric_values(weather)):
-        centre_x = PAD_X_ROW + i * (cell_w + CELL_GAP) + cell_w / 2
-
-        label = metric["label"]
-        draw_tracked(
-            draw,
-            centre_x - tracked_width(draw, label, label_font, TRACK_LABEL) / 2,
-            baseline_for(draw, label, label_font, label_centre),
-            label, label_font, TRACK_LABEL,
+        x = columns[i % 2] + METRIC_PAD_L
+        row_top, row_bottom = rows[i // 2]
+        top = row_top + (row_bottom - row_top - METRIC_BLOCK_H) / 2
+        draw_row(
+            draw, x, top + METRIC_LABEL_LINE / 2, metric["label"],
+            label_font, TRACK_LABEL, ref="H",
+        )
+        draw_row(
+            draw, x, top + METRIC_LABEL_LINE + METRIC_LABEL_GAP + SIZE_METRIC / 2,
+            metric["value"], value_font, track_value,
         )
 
-        # The cell clips in the HTML. In PIL nothing clips, so when a value
-        # runs wide the glyph gives way instead — the same rule as the hero,
-        # and it never takes the glyph below the 26 px icon floor.
-        glyph, value = metric["glyph"], metric["value"]
-        value_w = draw.textlength(value, font=value_font)
-        trend = metric.get("trend")
-        arrow_w = TREND_GAP + TREND_ARROW if trend else 0
-        glyph_size = SIZE_METRIC_GLYPH
-        while glyph_size > SIZE_METRIC_GLYPH_MIN and (
-            glyph_advance(draw, glyph, glyph_size) + METRIC_GAP + value_w + arrow_w > cell_w
-        ):
-            glyph_size -= 1
-        glyph_w = glyph_advance(draw, glyph, glyph_size)
 
-        x = centre_x - (glyph_w + METRIC_GAP + value_w + arrow_w) / 2
-        draw_centred(draw, x, row_centre, glyph, icon(glyph_size))
-        x += glyph_w + METRIC_GAP
-        draw_centred(draw, x, row_centre, value, value_font)
-        if trend:
-            draw_trend_arrow(draw, x + value_w + TREND_GAP, row_centre, TREND_ARROW, trend)
+# ── Right zone B: NEXT (y 168-328) ────────────────────────────────────────────
 
+def draw_next(draw, weather):
+    """What is happening, the figures that qualify it, and the next 4 hours.
 
-# ── Region 4: ten-day row (y 382-480) ─────────────────────────────────────────
-
-# 6 px of top padding, then day, glyph, high and the bar. The design's text
-# boxes are 22 / 32 / 30 over a 2 px margin and a 10 px bar, which is 96 px
-# inside a 92 px content box — the HTML resolves that by letting flexbox
-# shrink the three text boxes, and this does the same 4 px by hand. The bar
-# is the one box that must not give: it is 10 px exactly.
-TEN_PAD_TOP = 6
-TEN_DAY_H = 21
-TEN_GLYPH_H = 31
-TEN_HIGH_H = 28
-TEN_BAR_GAP = 2
-TEN_BAR_H = 10
-
-assert (TEN_PAD_TOP + TEN_DAY_H + TEN_GLYPH_H + TEN_HIGH_H
-        + TEN_BAR_GAP + TEN_BAR_H) == TENDAY_H
-
-
-def draw_tenday(draw, weather):
-    """Day, condition glyph, high, and a 10 px bar of condition ink.
-
-    No height encoding and no 0 C rule: there is no vertical room for a
-    scale. Condition is carried entirely by the glyph and the bar's ink,
-    temperature entirely by the number, which is the honest split when a
-    channel has to go. The ten columns are always drawn, so the geometry
-    cannot move between refreshes even if the forecast comes back short.
+    White ground: the colour channel belongs to the left field, and a second
+    coloured region would put severity and temperature ink side by side.
     """
-    days = (weather.get("daily") or [])[:10]
-    col_w = (WIDTH - 2 * PAD_X_ROW - TEN_GAP * 9) / 10
+    zone_bottom = NEXT_Y1 - RULE_ZONE
+    draw.rectangle([RIGHT_X, zone_bottom, WIDTH - 1, NEXT_Y1 - 1], fill=BLACK)
 
-    day_font = text(SIZE_DAY)
-    high_font = display(SIZE_TEN_HIGH)
-    top = TEN_Y0 + TEN_PAD_TOP
-    day_centre = top + TEN_DAY_H / 2
-    glyph_centre = top + TEN_DAY_H + TEN_GLYPH_H / 2
-    high_centre = top + TEN_DAY_H + TEN_GLYPH_H + TEN_HIGH_H / 2
-    bar_top = top + TEN_DAY_H + TEN_GLYPH_H + TEN_HIGH_H + TEN_BAR_GAP
+    concern = select_concern(weather)
+    content_bottom = zone_bottom - NEXT_PAD_BOTTOM
+    y = NEXT_Y0 + NEXT_PAD_TOP
 
-    for i in range(10):
+    # Title row: glyph in a fixed 46 px column, then the headline.
+    draw_glyph(
+        draw, RIGHT_X0, y + NEXT_TITLE_H / 2, concern["glyph"], SIZE_NEXT_GLYPH,
+    )
+    headline_font = semibold(SIZE_HEADLINE)
+    headline_x = RIGHT_X0 + NEXT_GLYPH_COL
+    headline = shorten_headline(
+        draw, concern["headline"], headline_font,
+        RIGHT_X1 - headline_x, TRACK_HEADLINE,
+    )
+    draw_row(
+        draw, headline_x, y + NEXT_TITLE_H / 2, headline, headline_font,
+        TRACK_HEADLINE, ref="H",
+    )
+    y += NEXT_TITLE_H + NEXT_SUB_GAP
+
+    # Sub-line. A stale render says so here and keeps its weather.
+    clauses = list(concern["clauses"])
+    if weather.get("stale"):
+        clauses.insert(0, f"STALE {MIDDOT} {hhmm(weather.get('fetched_at'))}")
+    sub_font = regular(SIZE_LABEL)
+    sub_line = fit_clauses(clauses, sub_font, RIGHT_X1 - RIGHT_X0)
+    draw_row(draw, RIGHT_X0, y + NEXT_SUB_H / 2, sub_line, sub_font, ref="H")
+
+    # Hour strip, pushed to the bottom of the zone under a 2 px rule.
+    cell_h = NEXT_HOUR_TIME_H + NEXT_HOUR_GAP + NEXT_HOUR_ROW_H
+    cells_top = content_bottom - cell_h
+    rule_y = cells_top - NEXT_STRIP_GAP - RULE_INNER
+    draw.rectangle(
+        [RIGHT_X0, rule_y, RIGHT_X1 - 1, rule_y + RULE_INNER - 1], fill=BLACK,
+    )
+
+    cell_w = (RIGHT_X1 - RIGHT_X0) / NEXT_HOURS
+    time_font = regular(SIZE_HOUR_TIME)
+    temp_font = semibold(SIZE_HOUR_TEMP)
+    hours = next_hours(weather)
+    for i in range(NEXT_HOURS):
+        hour = hours[i] if i < len(hours) else {}
+        x = RIGHT_X0 + i * cell_w
+        draw_row(
+            draw, x, cells_top + NEXT_HOUR_TIME_H / 2,
+            hhmm(hour.get("time")), time_font, TRACK_HOUR,
+        )
+        row_centre = cells_top + NEXT_HOUR_TIME_H + NEXT_HOUR_GAP + NEXT_HOUR_ROW_H / 2
+        if hour:
+            draw_glyph(
+                draw, x, row_centre,
+                condition_glyph(hour.get("icon"), is_night(weather)),
+                SIZE_HOUR_GLYPH,
+            )
+        draw_row(
+            draw, x + NEXT_HOUR_GLYPH_COL, row_centre,
+            fmt_temp(hour.get("temp")), temp_font,
+        )
+
+
+# ── Right zone C: LATER (y 328-480) ───────────────────────────────────────────
+
+def draw_later(draw, weather):
+    """Five days: name, condition glyph, temperature bar, high.
+
+    Length and colour answer different questions and stay independent.
+    Length is relative to this week's own min and max, so it shows the
+    week's shape; fill is absolute against the temperature bands, so it
+    shows the week's level. A flat hot week keeps its shape, and a mild
+    week spends no ink at all.
+
+    There is no key. Warm-is-warm and blue-is-freezing is a convention
+    people already hold, and the high is printed beside every bar, so the
+    panel teaches its own scale within a couple of days.
+    """
+    days = (weather.get("daily") or [])[:LATER_ROWS]
+    highs = [d.get("high") for d in days if d.get("high") is not None]
+    lowest, highest = (min(highs), max(highs)) if highs else (0.0, 1.0)
+    span = (highest - lowest) or 1.0
+    track = LATER_BAR_X1 - LATER_BAR_X0
+
+    day_font = regular(SIZE_LABEL)
+    high_font = semibold(SIZE_DAY_HIGH)
+
+    # Always five rows, so the geometry cannot move between refreshes even
+    # if the forecast comes back short.
+    for i in range(LATER_ROWS):
         day = days[i] if i < len(days) else {}
-        left = PAD_X_ROW + i * (col_w + TEN_GAP)
-        centre_x = left + col_w / 2
+        top = LATER_Y0 + LATER_PAD_Y + i * (LATER_ROW_H + LATER_ROW_GAP)
+        centre = top + LATER_ROW_H / 2
 
-        draw_centred(draw, centre_x, day_centre, day.get("day", DASH), day_font, anchor_x="m")
-
+        draw_row(draw, RIGHT_X0, centre, day.get("day") or DASH, day_font,
+                 TRACK_DAY, ref="H")
         high = day.get("high")
-        draw_centred(draw, centre_x, high_centre, fmt_temp(high), high_font, anchor_x="m")
-
+        draw_row(draw, RIGHT_X1, centre, fmt_temp(high), high_font, align="right")
         if high is None:
             continue
-        draw_centred(
-            draw, centre_x, glyph_centre, condition_glyph(day.get("icon")),
-            icon(SIZE_TEN_GLYPH), anchor_x="m",
+
+        draw_glyph(
+            draw, RIGHT_X0 + LATER_DAY_COL, centre,
+            condition_glyph(day.get("icon")), SIZE_DAY_GLYPH,
         )
-        box = [round(left), bar_top, round(left + col_w) - 1, bar_top + TEN_BAR_H - 1]
-        ink = CATEGORY_INK.get(condition_category(day.get("icon"), high), WHITE)
+
+        width = round(
+            (LATER_BAR_MIN + (high - lowest) / span * LATER_BAR_SPAN) * track
+        )
+        bar_top = round(centre - LATER_BAR_H / 2)
+        box = [
+            LATER_BAR_X0, bar_top,
+            LATER_BAR_X0 + width - 1, bar_top + LATER_BAR_H - 1,
+        ]
+        ink = temp_band_ink(high)
         if ink == WHITE:
-            draw.rectangle(box, fill=WHITE, outline=BLACK, width=2)
+            draw.rectangle(box, fill=WHITE, outline=BLACK, width=RULE_INNER)
         else:
             draw.rectangle(box, fill=ink)
 
@@ -1622,12 +1810,12 @@ def draw_tenday(draw, weather):
 def draw_error_screen(draw, message):
     draw.text(
         (WIDTH // 2, HEIGHT // 2), message,
-        fill=BLACK, font=display(34), anchor="mm", align="center",
+        fill=BLACK, font=semibold(34), anchor="mm", align="center",
     )
 
 
 def create_dashboard(weather, theme_name="inky"):
-    """Render layout 7A.
+    """Render layout 10.
 
     theme_name is accepted for backwards compatibility with desktop.py;
     the panel and the desktop window render identically, so the desktop
@@ -1641,10 +1829,10 @@ def create_dashboard(weather, theme_name="inky"):
         return img
 
     try:
-        draw_hero(draw, weather)
-        draw_band(draw, weather)
+        draw_now(draw, weather)
         draw_metrics(draw, weather)
-        draw_tenday(draw, weather)
+        draw_next(draw, weather)
+        draw_later(draw, weather)
     except Exception as e:
         print(f"Error drawing dashboard: {e}")
         img = Image.new("RGB", (WIDTH, HEIGHT), WHITE)
@@ -1652,6 +1840,30 @@ def create_dashboard(weather, theme_name="inky"):
         draw_error_screen(draw, "RENDER ERROR\nCheck Console Logs")
 
     return img
+
+
+def check_widths():
+    """Assert the two strings most likely to overflow actually fit.
+
+    The hero temperature's widest realistic value and the longest alert
+    name in the design set. Both are inside a budget rather than measured
+    at draw time, and a budget that is never checked is a budget that has
+    already been broken once.
+    """
+    if not fonts_loaded():
+        print("Fonts missing — skipping the width checks.")
+        return
+    hero = text_width("-19°", semibold(SIZE_TEMP), TRACK_TEMP)
+    assert hero <= LEFT_X1 - LEFT_X0, f"hero temperature overflows: {hero:.0f} px"
+
+    headline = text_width(
+        "Snowfall warning", semibold(SIZE_HEADLINE), TRACK_HEADLINE,
+    )
+    budget = RIGHT_X1 - RIGHT_X0 - NEXT_GLYPH_COL
+    assert headline <= budget, f"headline overflows: {headline:.0f} px of {budget}"
+
+
+check_widths()
 
 
 @lru_cache(maxsize=1)
@@ -1761,6 +1973,142 @@ def check_alerts():
         print(f"  Beacon  : {SEVERITY_COLOUR_NAME[alert['severity']]}")
 
 
+# ── Canned scenarios ──────────────────────────────────────────────────────────
+# The five states from the design file, so every one can be checked without
+# waiting for the weather. These never touch the network.
+
+SCENARIO_ICONS = {
+    "clear": "clear-day",
+    "partly": "partly-cloudy-day",
+    "cloud": "cloudy",
+    "rain": "rain",
+    "snow": "snow",
+    "storm": "thunderstorm",
+}
+
+SCENARIOS = {
+    "quiet": {
+        "temp": 21.8, "feels": 24.4, "high": 30.0, "low": 18.0, "dew": 18.0,
+        "icon": "partly", "conditions": "dry all day",
+        "wind": 0.0, "rain": 0.0, "pressure": 1021.0, "daylight": "13h56",
+        "alert": None,
+        "hours": [("partly", 24.0, 5), ("clear", 24.0, 0),
+                  ("partly", 22.0, 0), ("cloud", 21.0, 10)],
+        "days": [("clear", 30.0), ("clear", 31.0), ("clear", 28.0),
+                 ("cloud", 26.0), ("rain", 24.0)],
+    },
+    "storm": {
+        "temp": 25.4, "feels": 27.1, "high": 26.0, "low": 17.0, "dew": 19.0,
+        "icon": "storm", "conditions": "thunderstorms",
+        "wind": 34.0, "rain": 4.2, "pressure": 998.0, "daylight": "15h12",
+        "alert": {"severity": "watch", "event": "Storm watch", "area": "", "hours": 4},
+        "hours": [("cloud", 25.0, 30), ("rain", 24.0, 70),
+                  ("rain", 22.0, 80), ("storm", 21.0, 90)],
+        "days": [("storm", 24.0), ("rain", 26.0), ("rain", 22.0),
+                 ("cloud", 19.0), ("clear", 23.0)],
+    },
+    "snow": {
+        "temp": -9.2, "feels": -14.3, "high": -8.0, "low": -17.0, "dew": -13.0,
+        "icon": "snow", "conditions": "snow all day",
+        "wind": 41.0, "rain": 0.0, "pressure": 994.0, "daylight": "8h36",
+        "alert": {"severity": "warning", "event": "Snowfall warning",
+                  "area": "", "hours": 14},
+        "hours": [("cloud", -9.0, 20), ("snow", -10.0, 80),
+                  ("snow", -12.0, 90), ("snow", -13.0, 90)],
+        "days": [("snow", -8.0), ("snow", -11.0), ("cloud", -11.0),
+                 ("clear", -13.0), ("cloud", -10.0)],
+    },
+    "rain": {
+        "temp": 11.3, "feels": 9.4, "high": 13.0, "low": 8.0, "dew": 10.0,
+        "icon": "rain", "conditions": "rain easing this evening",
+        "wind": 22.0, "rain": 12.6, "pressure": 1002.0, "daylight": "11h08",
+        "alert": None,
+        "hours": [("rain", 11.0, 90), ("rain", 11.0, 90),
+                  ("rain", 10.0, 80), ("cloud", 10.0, 20)],
+        "days": [("rain", 12.0), ("rain", 11.0), ("cloud", 13.0),
+                 ("rain", 10.0), ("cloud", 14.0)],
+    },
+    "heat": {
+        "temp": 33.4, "feels": 36.2, "high": 34.0, "low": 21.0, "dew": 20.0,
+        "icon": "clear", "conditions": "clear and very hot",
+        "wind": 8.0, "rain": 0.0, "pressure": 1018.0, "daylight": "15h44",
+        "alert": {"severity": "advisory", "event": "Heat advisory",
+                  "area": "", "hours": 5},
+        "hours": [("clear", 33.0, 0), ("clear", 32.0, 0),
+                  ("clear", 30.0, 0), ("partly", 28.0, 0)],
+        "days": [("clear", 33.0), ("clear", 34.0), ("clear", 35.0),
+                 ("clear", 32.0), ("clear", 29.0)],
+    },
+}
+
+
+def scenario_weather(name):
+    """A payload shaped exactly like fetch_weather's, from canned data."""
+    spec = SCENARIOS[name]
+    clock = time.localtime()
+    midday = time.mktime((clock.tm_year, clock.tm_mon, clock.tm_mday,
+                          12, 0, 0, 0, 0, -1))
+    now = midday + 3.5 * 3600        # 15:30, so the strip starts at 16:00
+
+    hours, minutes = spec["daylight"].split("h")
+    daylight = int(hours) * 3600 + int(minutes) * 60
+
+    alert = None
+    if spec["alert"]:
+        alert = dict(spec["alert"])
+        alert["expires"] = now + alert.pop("hours") * 3600
+
+    return {
+        "temp": spec["temp"],
+        "feels_like": spec["feels"],
+        "condition": spec["conditions"],
+        "icon_name": SCENARIO_ICONS[spec["icon"]],
+        "obs_time": now,
+        "today_high": spec["high"],
+        "today_low": spec["low"],
+        "today_conditions": spec["conditions"],
+        "dew_point": spec["dew"],
+        "wind_avg": spec["wind"],
+        "wind_gust": spec["wind"] * 1.3,
+        "wind_dir": 225,
+        "pressure": spec["pressure"],
+        "pressure_trend": "falling" if spec["pressure"] < 1000 else "steady",
+        "rain_today": spec["rain"],
+        "humidity": 70,
+        "battery": 2.72,
+        "lightning_count": None,
+        "lightning_distance": None,
+        "lightning_epoch": None,
+        "sunrise": midday - daylight / 2,
+        "sunset": midday + daylight / 2,
+        "daily": [
+            {
+                "day": time.strftime("%a", time.localtime(now + i * 86400)).upper(),
+                "high": high,
+                "low": high - 8,
+                "icon": SCENARIO_ICONS[cat],
+                "conditions": spec["conditions"],
+                "precip_prob": None,
+            }
+            for i, (cat, high) in enumerate(spec["days"])
+        ],
+        "hourly": [
+            {
+                "time": midday + (4 + i) * 3600,
+                "prob": prob,
+                "type": "snow" if cat == "snow" else "rain",
+                "temp": temp,
+                "icon": SCENARIO_ICONS[cat],
+            }
+            for i, (cat, temp, prob) in enumerate(spec["hours"])
+        ],
+        "alert": alert,
+        "fetched_at": now,
+    }
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+
 def main():
     parser = argparse.ArgumentParser(description="Render the Tempest Inky dashboard.")
     parser.add_argument(
@@ -1769,9 +2117,21 @@ def main():
     )
     parser.add_argument(
         "--output", default="dashboard-preview.png",
-        help="Where to save the preview when no Inky panel is attached. "
+        help="Where to save the render when no Inky panel is attached. "
              "PNG, not JPEG: the panel renders 7 flat inks, and JPEG "
              "ringing turns those into thousands of colours.",
+    )
+    parser.add_argument(
+        "--preview", metavar="PATH",
+        help="Write the rendered PNG to PATH instead of pushing it to the "
+             "panel, so the layout can be checked with no display attached. "
+             "Ignores the refresh schedule and leaves it untouched.",
+    )
+    parser.add_argument(
+        "--scenario", choices=sorted(SCENARIOS),
+        help="Render from canned data matching the design file's scenarios "
+             "instead of fetching, so every state can be checked without "
+             "waiting for the weather.",
     )
     parser.add_argument(
         "--check-alerts", action="store_true",
@@ -1784,34 +2144,48 @@ def main():
         check_alerts()
         return
 
-    next_due = load_state().get("next_due")
-    if not args.force and next_due and time.time() < next_due:
-        print(f"Not due until {hhmm(next_due)} — skipping (use --force to override).")
+    # A preview or a scenario is a rendering job, not a refresh: it neither
+    # consults the schedule nor moves it on.
+    render_only = bool(args.preview or args.scenario)
+
+    if args.scenario:
+        weather = scenario_weather(args.scenario)
+    else:
+        if not render_only:
+            next_due = load_state().get("next_due")
+            if not args.force and next_due and time.time() < next_due:
+                print(f"Not due until {hhmm(next_due)} — skipping "
+                      f"(use --force to override).")
+                return
+            if INKY_AVAILABLE:
+                wait_for_network(timeout=120)
+
+        print("Fetching weather...")
+        weather = fetch_all()
+
+        if not render_only:
+            state = load_state()
+            state["next_due"] = time.time() + refresh_interval_minutes(weather) * 60
+            save_state(state)
+
+    img = quantize_for_inky(create_dashboard(weather, theme_name="inky"))
+
+    if args.preview:
+        img.save(args.preview)
+        print(f"Saved {args.preview}")
         return
-
-    if INKY_AVAILABLE:
-        wait_for_network(timeout=120)
-
-    print("Fetching weather...")
-    weather = fetch_all()
-
-    state = load_state()
-    state["next_due"] = time.time() + refresh_interval_minutes(weather) * 60
-    save_state(state)
-
-    img = create_dashboard(weather, theme_name="inky")
 
     if INKY_AVAILABLE:
         try:
             panel = auto()
-            panel.set_image(quantize_for_inky(img))
+            panel.set_image(img)
             panel.show()
             print("Display updated.")
         except Exception as e:
             print(f"Display error: {e}")
             raise   # let systemd record the failure
     else:
-        quantize_for_inky(img).save(args.output)
+        img.save(args.output)
         print(f"Saved {args.output}")
 
 
