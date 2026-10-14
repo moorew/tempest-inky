@@ -330,7 +330,7 @@ METRIC_BLOCK_H = METRIC_LABEL_LINE + METRIC_LABEL_GAP + SIZE_METRIC   # 68
 NEXT_PAD_TOP = 16
 NEXT_PAD_BOTTOM = 12
 NEXT_TITLE_H = 32
-NEXT_GLYPH_COL = 46
+NEXT_GLYPH_COL = 54         # widest condition glyph is 45 px at 32; 9 px clear
 NEXT_SUB_GAP = 6
 NEXT_SUB_H = SIZE_LABEL
 NEXT_STRIP_GAP = 10         # clearance above the strip's rule
@@ -1382,26 +1382,25 @@ def select_concern(weather):
             "clauses": [f"low {fmt_temp(low)}", f"dew {fmt_temp(dew)}", exact_clause],
         }
 
-    # 7. Nothing active.
+    # 7. Nothing active: say what the sky is doing now.
+    # This used to read "All clear today" over the day's conditions, which
+    # the API words as sky ("Partly Cloudy", "Rain Possible"), so the panel
+    # said all clear and partly cloudy in one breath. It also promised the
+    # whole day while only the next few hours are checked above. The
+    # current condition is what you would see out of the window, and when
+    # anything above becomes active it takes this slot, so the absence of
+    # a concern is still legible.
     trend = weather.get("pressure_trend")
-    clauses = [
-        (weather.get("today_conditions") or "").strip().lower() or None,
-        exact_clause,
-        f"dew {fmt_temp(dew)}" if dew is not None else None,
-        f"pressure {trend}" if trend in ("rising", "falling") else None,
-    ]
+    condition = weather.get("condition") or weather.get("today_conditions")
     return {
-        "glyph": condition_glyph(day_icon(weather)),
-        "headline": "All clear today",
-        "clauses": clauses,
+        "glyph": condition_glyph(weather.get("icon_name"), is_night(weather)),
+        "headline": sentence_case(condition) if condition else "Nothing to watch",
+        "clauses": [
+            exact_clause,
+            f"dew {fmt_temp(dew)}" if dew is not None else None,
+            f"pressure {trend}" if trend in ("rising", "falling") else None,
+        ],
     }
-
-
-def day_icon(weather):
-    days = weather.get("daily") or []
-    if days:
-        return days[0].get("icon")
-    return weather.get("icon_name")
 
 
 def precip_transition(weather):
@@ -1708,7 +1707,7 @@ def draw_next(draw, weather):
     content_bottom = zone_bottom - NEXT_PAD_BOTTOM
     y = NEXT_Y0 + NEXT_PAD_TOP
 
-    # Title row: glyph in a fixed 46 px column, then the headline.
+    # Title row: glyph in a fixed 54 px column, then the headline.
     draw_glyph(
         draw, RIGHT_X0, y + NEXT_TITLE_H / 2, concern["glyph"], SIZE_NEXT_GLYPH,
     )
@@ -1879,6 +1878,21 @@ def check_widths():
     budget = RIGHT_X1 - RIGHT_X0 - NEXT_GLYPH_COL
     assert headline <= budget, f"headline overflows: {headline:.0f} px of {budget}"
 
+    # The longest condition the Tempest API words, now that a quiet panel
+    # carries the condition as its headline.
+    condition = text_width(
+        "Thunderstorms possible", semibold(SIZE_HEADLINE), TRACK_HEADLINE,
+    )
+    assert condition <= budget, f"condition overflows: {condition:.0f} px of {budget}"
+
+    # Every glyph the NEXT title row can draw keeps clear of the headline.
+    glyph_font = icon(SIZE_NEXT_GLYPH)
+    for name, glyph in WI.items():
+        left, _, right, _ = glyph_font.getbbox(glyph)
+        assert right - left <= NEXT_GLYPH_COL - 8, (
+            f"NEXT glyph {name} crowds the headline: {right - left} px"
+        )
+
 
 check_widths()
 
@@ -2006,7 +2020,7 @@ SCENARIO_ICONS = {
 SCENARIOS = {
     "quiet": {
         "temp": 21.8, "feels": 24.4, "high": 30.0, "low": 18.0, "dew": 18.0,
-        "icon": "partly", "conditions": "dry all day",
+        "icon": "partly", "conditions": "Partly Cloudy",
         "wind": 0.0, "rain": 0.0, "pressure": 1021.0, "daylight": "13h56",
         "alert": None,
         "hours": [("partly", 24.0, 5), ("clear", 24.0, 0),
