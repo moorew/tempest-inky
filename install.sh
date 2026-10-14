@@ -54,6 +54,25 @@ echo "  Done."
 # ── Step 2: Enable SPI and I2C ────────────────────────────────────────────────
 
 echo "[2/7] Enabling SPI and I2C interfaces..."
+CONFIG_FILE=""
+for candidate in /boot/firmware/config.txt /boot/config.txt; do
+    if [ -f "$candidate" ]; then
+        CONFIG_FILE="$candidate"
+        break
+    fi
+done
+
+# SPI, I2C and the chip-select overlay (step 4) only take effect at boot.
+# Until then the panel cannot be driven, so step 7 holds the timer back.
+REBOOT_PENDING=false
+if [ -n "$CONFIG_FILE" ]; then
+    for param in "dtparam=spi=on" "dtparam=i2c_arm=on"; do
+        if ! grep -q "^$param" "$CONFIG_FILE"; then
+            REBOOT_PENDING=true
+        fi
+    done
+fi
+
 if command -v raspi-config &>/dev/null; then
     sudo raspi-config nonint do_spi 0
     sudo raspi-config nonint do_i2c 0
@@ -82,18 +101,11 @@ fi
 # ── Step 4: Bookworm SPI chip-select overlay fix ──────────────────────────────
 
 echo "[4/7] Checking SPI overlay config..."
-CONFIG_FILE=""
-for candidate in /boot/firmware/config.txt /boot/config.txt; do
-    if [ -f "$candidate" ]; then
-        CONFIG_FILE="$candidate"
-        break
-    fi
-done
-
 if [ -n "$CONFIG_FILE" ]; then
     if grep -q "dtparam=spi=on" "$CONFIG_FILE" && ! grep -q "dtoverlay=spi0-0cs" "$CONFIG_FILE"; then
         echo "  Applying Bookworm SPI chip-select fix to $CONFIG_FILE..."
         sudo sed -i '/dtparam=spi=on/a dtoverlay=spi0-0cs' "$CONFIG_FILE"
+        REBOOT_PENDING=true
     else
         echo "  SPI overlay config OK."
     fi
@@ -198,6 +210,10 @@ StandardError=journal
 TimeoutStartSec=300
 SyslogIdentifier=tempest-inky
 
+# Unbuffered, so journalctl shows each step as it happens rather than all
+# of them at once when the run ends.
+Environment=PYTHONUNBUFFERED=1
+
 # Run at lower priority so SSH and system processes always stay responsive
 Nice=10
 IOSchedulingClass=idle
@@ -231,10 +247,16 @@ WantedBy=timers.target
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl enable tempest-inky.timer
-sudo systemctl start tempest-inky.timer
-
-echo "  Timer enabled."
+if $REBOOT_PENDING; then
+    # Starting the timer now would fire a run straight away (OnBootSec has
+    # long passed) that cannot reach the panel until the reboot, leaving a
+    # misleading error in the log. It starts on the next boot instead.
+    sudo systemctl enable tempest-inky.timer
+    echo "  Timer enabled. It starts on the next boot."
+else
+    sudo systemctl enable --now tempest-inky.timer
+    echo "  Timer enabled and running."
+fi
 
 # ── Configure journald volatile storage to reduce SD card writes ──────────────
 
