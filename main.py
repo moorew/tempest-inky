@@ -1320,8 +1320,13 @@ def select_concern(weather):
 
     # 2. Station health. No ambient state: it appears here or not at all.
     obs_time = weather.get("obs_time")
-    if obs_time and (time.time() - obs_time) > STATION_SILENT_SECONDS:
-        silent_for = int((time.time() - obs_time) / 60)
+    # Measured against when the data was fetched, not the wall clock. A
+    # stale payload is our outage, not the station's, and the sub-line
+    # already says STALE; and a --scenario render, whose observation time
+    # is pinned to 15:30, stays that scenario at any hour of the day.
+    reference = weather.get("fetched_at") or time.time()
+    if obs_time and (reference - obs_time) > STATION_SILENT_SECONDS:
+        silent_for = int((reference - obs_time) / 60)
         return {
             "glyph": WI["na"],
             "headline": "Station silent",

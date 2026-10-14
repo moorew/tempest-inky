@@ -287,11 +287,10 @@ sudo systemctl start tempest-inky.timer
 
 1. Check that you rebooted after installation.
 2. Check logs: `journalctl -u tempest-inky.service -n 50`
-3. Try a manual run to see errors directly:
+3. Try a manual run to see errors directly. `--force` matters here: without it a run that is not due yet exits without touching the panel.
    ```bash
    cd ~/tempest-inky
-   sudo systemctl start tempest-inky.service
-   journalctl -u tempest-inky.service -n 20
+   venv/bin/python3 main.py --force
    ```
 
 ### "No module named inky" or import errors
