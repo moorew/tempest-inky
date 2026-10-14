@@ -266,8 +266,11 @@ systemctl status tempest-inky.timer
 # See recent logs (most useful for debugging)
 journalctl -u tempest-inky.service -n 50
 
-# Force an immediate refresh
+# Run one tick now (skips if a refresh isn't due yet; check the logs)
 sudo systemctl start tempest-inky.service
+
+# Force an immediate repaint, ignoring the schedule
+cd ~/tempest-inky && venv/bin/python3 main.py --force
 
 # Stop automatic refreshes
 sudo systemctl stop tempest-inky.timer

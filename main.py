@@ -704,6 +704,23 @@ def save_state(state):
     save_json(STATE_FILE, state)
 
 
+def current_boot_id():
+    """The kernel's ID for this boot, or None off Linux.
+
+    The refresh schedule is stored as wall-clock time and survives a reboot,
+    so without this the first tick after boot reads the previous boot's
+    next_due and skips. That leaves the panel blank, or showing whatever it
+    held before, for up to 30 minutes after power-on. Worse, a Pi has no
+    RTC: until NTP syncs, the clock sits at the shutdown time, which is
+    exactly when an old next_due looks most in the future.
+    """
+    try:
+        with open("/proc/sys/kernel/random/boot_id") as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
 # ── Location and region ───────────────────────────────────────────────────────
 # Everything below is optional. With nothing configured the station's own
 # coordinates and timezone come back from the API and pick the provider.
@@ -2148,12 +2165,19 @@ def main():
     # consults the schedule nor moves it on.
     render_only = bool(args.preview or args.scenario)
 
+    boot_id = current_boot_id()
+
     if args.scenario:
         weather = scenario_weather(args.scenario)
     else:
         if not render_only:
-            next_due = load_state().get("next_due")
-            if not args.force and next_due and time.time() < next_due:
+            state = load_state()
+            next_due = state.get("next_due")
+            # A schedule written in a previous boot does not apply to this one.
+            new_boot = boot_id is not None and state.get("boot_id") != boot_id
+            if new_boot:
+                print("No successful refresh yet this boot — refreshing now.")
+            elif not args.force and next_due and time.time() < next_due:
                 print(f"Not due until {hhmm(next_due)} — skipping "
                       f"(use --force to override).")
                 return
@@ -2162,11 +2186,6 @@ def main():
 
         print("Fetching weather...")
         weather = fetch_all()
-
-        if not render_only:
-            state = load_state()
-            state["next_due"] = time.time() + refresh_interval_minutes(weather) * 60
-            save_state(state)
 
     img = quantize_for_inky(create_dashboard(weather, theme_name="inky"))
 
@@ -2187,6 +2206,15 @@ def main():
     else:
         img.save(args.output)
         print(f"Saved {args.output}")
+
+    # The schedule only moves on once the panel has actually been painted.
+    # Advancing it before the push meant one failed write cost a whole
+    # 10-30 minute interval before the next attempt.
+    if not render_only:
+        state = load_state()
+        state["next_due"] = time.time() + refresh_interval_minutes(weather) * 60
+        state["boot_id"] = boot_id
+        save_state(state)
 
 
 if __name__ == "__main__":
